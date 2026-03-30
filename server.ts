@@ -26,6 +26,8 @@ app.use(cors({
 }));
 app.use(express.json());
 
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
 app.all('/api/users/me', usersMe);
 app.all('/api/users/register', usersRegister);
 app.all('/api/auth/demo', authDemo);
