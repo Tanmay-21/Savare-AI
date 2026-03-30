@@ -3,19 +3,26 @@
 ## Prerequisites
 
 - Node.js 18+
-- Vercel CLI: `npm install -g vercel`
 - A Supabase project (free tier is sufficient for development)
 
 ## Setup
 
 ```bash
 npm install
-cp .env.local.example .env.local   # fill in Supabase credentials (see README)
-vercel link                         # one-time: connect repo to Vercel project
-vercel dev                          # http://localhost:3000 — runs Vite + API functions
+cp .env.local.example .env.local   # fill in Supabase + API credentials (see README)
 ```
 
-> `npm run dev` starts the Vite frontend only (port 3000). API calls to `/api/*` will return 404 unless you use `vercel dev`.
+Open two terminals:
+
+```bash
+# Terminal 1 — Express API server (port 3001)
+npm start
+
+# Terminal 2 — Vite frontend (port 3000)
+npm run dev
+```
+
+Vite proxies all `/api/*` requests to the Express server automatically. Visit `http://localhost:3000`.
 
 For Supabase schema setup (tables, RPC functions), see the SQL migrations in the [README](../README.md#2-run-database-migrations).
 
@@ -24,8 +31,9 @@ For Supabase schema setup (tables, RPC functions), see the SQL migrations in the
 <!-- AUTO-GENERATED -->
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start Vite dev server on port 3000 (frontend only — no API functions) |
-| `npm run build` | Production build, outputs to `dist/` |
+| `npm start` | Start Express API server (uses `$PORT`, defaults to 3001) |
+| `npm run dev` | Start Vite frontend on port 3000 (proxies `/api/*` to port 3001) |
+| `npm run build` | Production build of the frontend, outputs to `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run lint` | TypeScript type-check only (`tsc --noEmit`) |
 | `npm run clean` | Delete `dist/` |
@@ -37,12 +45,14 @@ For Supabase schema setup (tables, RPC functions), see the SQL migrations in the
 ## Environment Variables
 
 <!-- AUTO-GENERATED -->
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_SUPABASE_URL` | Yes | Supabase project URL — embedded in browser bundle (safe, anon access only) |
-| `VITE_SUPABASE_ANON_KEY` | Yes | Supabase anonymous key — embedded in browser bundle |
-| `SUPABASE_URL` | Yes | Supabase project URL — used by Vercel API functions (server-side only) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key — server-only, **never expose to browser** |
+| Variable | Required | Where | Description |
+|----------|----------|-------|-------------|
+| `VITE_SUPABASE_URL` | Yes | Browser | Supabase project URL — embedded in browser bundle |
+| `VITE_SUPABASE_ANON_KEY` | Yes | Browser | Supabase anonymous key — embedded in browser bundle |
+| `VITE_API_BASE_URL` | Yes (prod) | Browser | Railway API URL — leave empty in local dev (Vite proxy handles it) |
+| `SUPABASE_URL` | Yes | Server only | Supabase project URL — used by the Express API server |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server only | Supabase service role key — **never expose to browser** |
+| `FRONTEND_URL` | Yes (prod) | Server only | Vercel app URL — configures CORS on the Railway server |
 <!-- AUTO-GENERATED -->
 
 ## Demo Mode

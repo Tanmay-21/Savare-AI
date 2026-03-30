@@ -11,12 +11,12 @@ A logistics management SPA for Indian transporters (fleet owners) and CHA (Custo
 | UI | React 19, React Router v7, Framer Motion, Recharts |
 | Styling | Tailwind CSS v4 (Vite plugin), lucide-react icons |
 | State | React local state + 30-second polling (`setInterval`) |
-| API | Vercel Serverless Functions (`api/` — TypeScript, `@vercel/node`) |
+| API | Express on Railway (`server.ts` + `api/` handlers — TypeScript, `tsx`) |
 | Auth | Supabase Auth (email/password + anonymous demo sessions) |
 | Database | Supabase PostgreSQL (accessed server-side via service role key) |
 | Reports | ExcelJS (Excel/CSV), jsPDF + jspdf-autotable (PDF) |
 | Build | Vite 6 |
-| Hosting | Vercel (static SPA + serverless functions) |
+| Hosting | Vercel (static SPA) + Railway (Express API server) |
 
 ## High-Level Data Flow
 
@@ -24,13 +24,13 @@ A logistics management SPA for Indian transporters (fleet owners) and CHA (Custo
 User Action
   └─> Page component (src/pages/)
         └─> apiFetch<T>() (src/lib/api.ts)
-              └─> Vercel Serverless Function (api/)
+              └─> Express API server on Railway (api/ handlers)
                     ├─> requireAuth(req) — validates JWT via Supabase
                     └─> supabase (service role) → PostgreSQL
                           └─> JSON response → camelCase → React state → re-render
 ```
 
-The browser **never** calls Supabase directly for data. All data access goes through `/api/*`. The browser only calls Supabase for **auth** (session management).
+The browser **never** calls Supabase directly for data. All data access goes through `/api/*` (proxied to Railway in production via `VITE_API_BASE_URL`). The browser only calls Supabase for **auth** (session management).
 
 ## Key Layers
 
@@ -74,12 +74,12 @@ Each page is a self-contained feature module. Pages fetch their own data via `ap
 
 ### API Layer (api/)
 
-All API handlers follow the same pattern:
+Route handlers live in `api/` and are mounted by `server.ts` (the Express entry point). All handlers follow the same pattern:
 
 ```typescript
-export default async function handler(req, res) {
+export default async function handler(req: Request, res: Response) {
   try {
-    const user = await requireAuth(req);   // validates Bearer JWT, fetches profile
+    const user = await requireAuth(req);      // validates Bearer JWT, fetches profile
     const body = parseBody(Schema, req.body); // Zod validation; throws 400 on failure
     // ... business logic ...
     return res.json(data);
@@ -89,6 +89,8 @@ export default async function handler(req, res) {
   }
 }
 ```
+
+Dynamic route params (e.g. `/api/orders/:id`) are accessed via `req.params.id` (Express), not `req.query.id`.
 
 ### Utilities (src/utils/)
 

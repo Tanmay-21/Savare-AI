@@ -337,8 +337,8 @@ Every subsequent push to `main` deploys both services automatically.
 | Command | Description |
 |---------|-------------|
 | `npm install` | Install dependencies |
-| `npm start` | Start Express API server on port 3001 |
-| `npm run dev` | Start Vite frontend on port 3000 (proxies /api/* to port 3001) |
+| `npm start` | Start Express API server (uses `$PORT`, defaults to 3001) |
+| `npm run dev` | Start Vite frontend on port 3000 (proxies `/api/*` to port 3001) |
 | `npm run build` | Production build of the frontend, outputs to `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run lint` | TypeScript type-check (`tsc --noEmit`) |
