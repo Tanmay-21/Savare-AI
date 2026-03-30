@@ -46,9 +46,7 @@ export default function Login() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/auth/demo', { method: 'POST' });
-      if (!res.ok) throw new Error('Failed to create demo session');
-      const { access_token, refresh_token } = await res.json();
+      const { access_token, refresh_token } = await apiFetch<{ access_token: string; refresh_token: string }>('/api/auth/demo', { method: 'POST' });
       await supabase.auth.setSession({ access_token, refresh_token });
     } catch (err: any) {
       setError(err.message || 'Demo sign-in failed. Please try again.');
