@@ -3,5 +3,3 @@ buildCommand = "npm install && npm run build:server"
 
 [deploy]
 startCommand = "npm start"
-healthcheckPath = "/health"
-healthcheckTimeout = 30
