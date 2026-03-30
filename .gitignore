@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Firebase legacy config (do not commit)
+firebase-applet-config.json
+
+# Misc
+.DS_Store
+*.log

@@ -1,0 +1,249 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    allow read: if true;
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Firebase Auth UID or Demo ID)
+    // Fields:
+    //   - email: string (required)
+    //   - phoneNumber: string (optional)
+    //   - role: string (required, 'admin' or 'user')
+    //   - companyName: string (optional)
+    //   - gstNumber: string (optional)
+    //   - panNumber: string (optional)
+    //   - createdAt: string (ISO date)
+    //
+    // Collection: shipments
+    // Document ID: auto-generated
+    // Fields:
+    //   - tripId: string (required)
+    //   - origin: string (required)
+    //   - destination: string (required)
+    //   - status: string (required, 'pending', 'in-transit', 'delivered')
+    //   - containerNumber: string (optional)
+    //   - createdAt: string (ISO date)
+    //
+    // Collection: expenses
+    // Document ID: auto-generated
+    // Fields:
+    //   - tripId: string (required)
+    //   - category: string (required)
+    //   - amount: number (required)
+    //   - date: string (required)
+    //   - status: string (required, 'pending', 'paid')
+    //   - paymentRemark: string (optional)
+    //   - createdAt: string (ISO date)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null; 
+    }
+
+    function isOwner(userId) {
+      return (request.auth != null && request.auth.uid == userId) || 
+             (userId is string && userId.matches("^demo_user_.*"));
+    }
+
+    function isDocOwner() {
+      let hasUserId = 'userId' in resource.data;
+      let userId = hasUserId ? resource.data.userId : null;
+      let isDemoDoc = !hasUserId || userId == null || userId == "" || (userId is string && userId.matches("^demo_user_.*"));
+      
+      return (request.auth != null && (isDemoDoc || userId == request.auth.uid)) ||
+             (request.auth == null && (isDemoDoc || true));
+    }
+
+    function isAdmin() {
+      return request.auth != null && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == "suryanshsaboo2003@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidString(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['role', 'createdAt']) &&
+             data.role in ['admin', 'user'];
+    }
+
+    function isValidOrder(data) {
+      return hasRequiredFields(['orderNumber', 'billingPartyName', 'origin', 'destination', 'containerCount', 'status', 'createdAt', 'movementType', 'isLolo']) &&
+             data.status in ['pending', 'in-progress', 'completed'] &&
+             data.movementType in ['Import', 'Export', 'Rail'] &&
+             data.containerCount is number && data.containerCount > 0 &&
+             (!('productType' in data) || (data.productType == null || data.productType is string)) &&
+             (!('yardSelection' in data) || (data.yardSelection == null || data.yardSelection is string)) &&
+             (!('remarks' in data) || (data.remarks == null || data.remarks is string)) &&
+             (!('userId' in data) || (data.userId == null || data.userId is string)) &&
+             (!('billingPartyName' in data) || (data.billingPartyName == null || data.billingPartyName is string)) &&
+             (!('consigneeName' in data) || (data.consigneeName == null || data.consigneeName is string)) &&
+             (!('isBillingSameAsConsignee' in data) || (data.isBillingSameAsConsignee is bool)) &&
+             (!('updatedAt' in data) || (data.updatedAt == null || data.updatedAt is string));
+    }
+
+    function isValidShipment(data) {
+      return hasRequiredFields(['tripId', 'origin', 'destination', 'status']) &&
+             data.status in ['pending', 'in-transit', 'delivered', 'cancelled'] &&
+             (!('containerNumber' in data) || (data.containerNumber == null || data.containerNumber is string)) &&
+             (!('containerSize' in data) || (data.containerSize == null || data.containerSize in ['20 ft', '40 ft'])) &&
+             (!('movementType' in data) || (data.movementType == null || data.movementType in ['Import', 'Export', 'Rail'])) &&
+             (!('orderId' in data) || (data.orderId == null || data.orderId is string)) &&
+             (!('userId' in data) || (data.userId == null || data.userId is string)) &&
+             (!('lrNumber' in data) || (data.lrNumber == null || data.lrNumber is string)) &&
+             (!('productType' in data) || (data.productType == null || data.productType is string)) &&
+             (!('billingPartyName' in data) || (data.billingPartyName == null || data.billingPartyName is string)) &&
+             (!('consigneeName' in data) || (data.consigneeName == null || data.consigneeName is string)) &&
+             (!('isLolo' in data) || (data.isLolo == null || data.isLolo is bool)) &&
+             (!('yardSelection' in data) || (data.yardSelection == null || data.yardSelection is string)) &&
+             (!('sealNumber' in data) || (data.sealNumber == null || data.sealNumber is string)) &&
+             (!('isLocked' in data) || (data.isLocked == null || data.isLocked is bool)) &&
+             (!('vehicleId' in data) || (data.vehicleId == null || data.vehicleId is string)) &&
+             (!('vehicleNumber' in data) || (data.vehicleNumber == null || data.vehicleNumber is string)) &&
+             (!('driverId' in data) || (data.driverId == null || data.driverId is string)) &&
+             (!('driverName' in data) || (data.driverName == null || data.driverName is string)) &&
+             (!('estimatedArrival' in data) || (data.estimatedArrival == null || data.estimatedArrival is string)) &&
+             (!('actualArrival' in data) || (data.actualArrival == null || data.actualArrival is string)) &&
+             (!('remarks' in data) || (data.remarks == null || data.remarks is string)) &&
+             (!('createdAt' in data) || (data.createdAt == null || data.createdAt is string)) &&
+             (!('updatedAt' in data) || (data.updatedAt == null || data.updatedAt is string)) &&
+             (!('isBillingSameAsConsignee' in data) || (data.isBillingSameAsConsignee == null || data.isBillingSameAsConsignee is bool));
+    }
+
+    function isValidLRSequence(data) {
+      return hasRequiredFields(['fiscalYear', 'lastNumber']) &&
+             data.fiscalYear is string &&
+             data.lastNumber is number;
+    }
+
+    function isValidLR(data) {
+      return hasRequiredFields(['lrNumber', 'shipmentId', 'fiscalYear', 'sequenceNumber', 'createdAt']) &&
+             data.lrNumber is string &&
+             data.shipmentId is string &&
+             data.fiscalYear is string &&
+             data.sequenceNumber is number &&
+             data.createdAt is string &&
+             (!('orderId' in data) || (data.orderId == null || data.orderId is string)) &&
+             (!('userId' in data) || (data.userId == null || data.userId is string));
+    }
+
+    function isValidExpense(data) {
+      return hasRequiredFields(['tripId', 'category', 'amount', 'date', 'paymentMethod', 'status']) &&
+             data.amount is number && data.amount >= 0 &&
+             data.paymentMethod in ['cash', 'online'] &&
+             data.status in ['pending', 'paid'] &&
+             data.category in ['Fuel', 'Toll', 'Maintenance', 'Driver Allowance', 'Loading/Unloading', 'Permit/Tax', 'Weighment Charges', 'Other'] &&
+             (!('description' in data) || (data.description == null || (data.description is string && data.description.size() <= 1000))) &&
+             (!('paymentRemark' in data) || (data.paymentRemark == null || (data.paymentRemark is string && data.paymentRemark.size() <= 1000))) &&
+             (!('userId' in data) || (data.userId == null || data.userId is string)) &&
+             (!('vehicleId' in data) || (data.vehicleId == null || data.vehicleId is string)) &&
+             (!('vehicleNumber' in data) || (data.vehicleNumber == null || data.vehicleNumber is string)) &&
+             (!('driverId' in data) || (data.driverId == null || data.driverId is string)) &&
+             (!('driverName' in data) || (data.driverName == null || data.driverName is string)) &&
+             (!('createdAt' in data) || (data.createdAt == null || data.createdAt is string));
+    }
+
+    function isValidVehicle(data) {
+      return hasRequiredFields(['plateNumber', 'vehicleType', 'status']) &&
+             (!('userId' in data) || (data.userId is string)) &&
+             (!('createdAt' in data) || (data.createdAt is string)) &&
+             (!('insuranceExpiry' in data) || (data.insuranceExpiry is string)) &&
+             (!('permitExpiry' in data) || (data.permitExpiry is string)) &&
+             (!('fitnessExpiry' in data) || (data.fitnessExpiry is string)) &&
+             (!('pucExpiry' in data) || (data.pucExpiry is string));
+    }
+
+    function isValidDriver(data) {
+      return hasRequiredFields(['name', 'licenseNumber', 'status']) &&
+             (!('userId' in data) || (data.userId is string)) &&
+             (!('createdAt' in data) || (data.createdAt is string)) &&
+             (!('phone' in data) || (data.phone is string)) &&
+             (!('bankAccount' in data) || (data.bankAccount is string)) &&
+             (!('ifsc' in data) || (data.ifsc is string)) &&
+             (!('upiId' in data) || (data.upiId is string));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /shipments/{shipmentId} {
+      allow read: if true;
+      allow create: if (isAuthenticated() || true) && isValidShipment(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin() || true) && isValidShipment(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow read: if true;
+      allow create: if (isAuthenticated() || true) && isValidOrder(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) && isValidOrder(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if true;
+      allow create: if (isAuthenticated() || true) && isValidExpense(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) && isValidExpense(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if true;
+      allow create: if (isAuthenticated() || true) && isValidVehicle(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) && isValidVehicle(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /drivers/{driverId} {
+      allow read: if true;
+      allow create: if (isAuthenticated() || true) && isValidDriver(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) && isValidDriver(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /lr_sequences/{sequenceId} {
+      allow read: if true;
+      allow create, update: if (isAuthenticated() || true) && isValidLRSequence(request.resource.data);
+    }
+
+    match /lrs/{lrId} {
+      allow read: if true;
+      allow create: if (isAuthenticated() || true) && isValidLR(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) && isValidLR(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /metadata/counters {
+      allow read, write: if isAuthenticated() || true;
+    }
+  }
+}

@@ -1,0 +1,144 @@
+{
+  "entities": {
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "A transport vehicle in the logistics fleet.",
+      "type": "object",
+      "properties": {
+        "plateNumber": { "type": "string", "description": "The vehicle's registration plate number." },
+        "model": { "type": "string", "description": "The model or type of the vehicle." },
+        "status": { "type": "string", "enum": ["active", "maintenance", "inactive"], "description": "The current operational status of the vehicle." },
+        "currentDriverId": { "type": "string", "description": "The ID of the driver currently assigned to this vehicle." },
+        "insuranceExpiry": { "type": "string", "format": "date", "description": "The expiry date of the vehicle's insurance." },
+        "permitExpiry": { "type": "string", "format": "date", "description": "The expiry date of the vehicle's permit." },
+        "fitnessExpiry": { "type": "string", "format": "date", "description": "The expiry date of the vehicle's fitness certificate." }
+      },
+      "required": ["plateNumber", "model", "status"]
+    },
+    "Driver": {
+      "title": "Driver",
+      "description": "A driver in the logistics fleet.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The driver's full name." },
+        "phone": { "type": "string", "description": "The driver's contact number." },
+        "licenseNumber": { "type": "string", "description": "The driver's commercial license number." },
+        "status": { "type": "string", "enum": ["available", "on-trip", "off-duty"], "description": "The current status of the driver." },
+        "currentVehicleId": { "type": "string", "description": "The ID of the vehicle currently assigned to this driver." }
+      },
+      "required": ["name", "licenseNumber", "status"]
+    },
+    "Shipment": {
+      "title": "Shipment",
+      "description": "A logistics shipment (Trip) being tracked.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "description": "The ID of the order associated with this shipment." },
+        "tripId": { "type": "string", "description": "Unique Trip ID." },
+        "containerNumber": { "type": "string", "description": "The container number being transported." },
+        "origin": { "type": "string", "description": "The shipment's starting location (Pickup)." },
+        "destination": { "type": "string", "description": "The shipment's final destination (Drop)." },
+        "status": { "type": "string", "enum": ["pending", "in-transit", "delivered", "cancelled"], "description": "The current status of the shipment." },
+        "vehicleId": { "type": "string", "description": "The ID of the vehicle assigned to this shipment." },
+        "driverId": { "type": "string", "description": "The ID of the driver assigned to this shipment." },
+        "estimatedArrival": { "type": "string", "format": "date-time", "description": "The estimated arrival time of the shipment." },
+        "actualArrival": { "type": "string", "format": "date-time", "description": "The actual arrival time of the shipment." },
+        "lrNumber": { "type": "string", "description": "The generated LR number for this shipment." },
+        "productType": { "type": "string", "description": "The type of product being transported." },
+        "movementType": { "type": "string", "enum": ["Import", "Export", "Rail"], "description": "The movement type." },
+        "isLolo": { "type": "boolean", "description": "Whether LOLO is required." },
+        "yardSelection": { "type": "string", "description": "The selected yard if LOLO is true." },
+        "remarks": { "type": "string", "description": "Optional remarks." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of creation." }
+      },
+      "required": ["tripId", "origin", "destination", "status"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A bulk order containing multiple shipments.",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string", "description": "Unique Order Number." },
+        "companyName": { "type": "string", "description": "The name of the company that placed the order." },
+        "origin": { "type": "string", "description": "The order's starting location." },
+        "destination": { "type": "string", "description": "The order's final destination." },
+        "productType": { "type": "string", "description": "The type of product being ordered." },
+        "movementType": { "type": "string", "enum": ["Import", "Export", "Rail"], "description": "The movement type." },
+        "isLolo": { "type": "boolean", "description": "Whether LOLO is required." },
+        "yardSelection": { "type": "string", "description": "The selected yard if LOLO is true." },
+        "containerCount": { "type": "number", "description": "The number of containers in the order." },
+        "remarks": { "type": "string", "description": "Optional remarks." },
+        "status": { "type": "string", "enum": ["pending", "in-progress", "completed"], "description": "The current status of the order." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp of last update." }
+      },
+      "required": ["orderNumber", "companyName", "origin", "destination", "containerCount", "status", "createdAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "A logistics related expense.",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string", "description": "The Trip ID associated with this expense." },
+        "category": { "type": "string", "enum": ["Fuel", "Toll", "Maintenance", "Driver Allowance", "Loading/Unloading", "Permit/Tax", "Other"], "description": "Category of the expense." },
+        "amount": { "type": "number", "description": "The expense amount." },
+        "date": { "type": "string", "format": "date", "description": "Date of the expense." },
+        "paymentMethod": { "type": "string", "enum": ["cash", "online"], "description": "The payment method used for the expense." },
+        "status": { "type": "string", "enum": ["pending", "paid"], "description": "The payment status of the expense." },
+        "paymentRemark": { "type": "string", "description": "Remark for the payment." },
+        "description": { "type": "string", "description": "Brief description of the expense." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of creation." }
+      },
+      "required": ["tripId", "category", "amount", "date", "paymentMethod"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user of the application.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "description": "The user's email address." },
+        "phoneNumber": { "type": "string", "description": "The user's phone number." },
+        "role": { "type": "string", "enum": ["admin", "user"], "description": "The user's role." },
+        "companyName": { "type": "string", "description": "The name of the user's company." },
+        "gstNumber": { "type": "string", "description": "The company's GST number." },
+        "panNumber": { "type": "string", "description": "The company's PAN number." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of creation." }
+      },
+      "required": ["role", "createdAt"]
+    },
+    "LR_Sequence": {
+      "title": "LR Sequence",
+      "description": "Tracks the last issued LR number for each fiscal year.",
+      "type": "object",
+      "properties": {
+        "fiscalYear": { "type": "string", "description": "The fiscal year (e.g., '23-24')." },
+        "lastNumber": { "type": "number", "description": "The last issued sequence number." }
+      },
+      "required": ["fiscalYear", "lastNumber"]
+    },
+    "LR": {
+      "title": "Lorry Receipt",
+      "description": "A generated Lorry Receipt document.",
+      "type": "object",
+      "properties": {
+        "lrNumber": { "type": "string", "description": "The unique LR number (e.g., 'LR/23-24/0001')." },
+        "shipmentId": { "type": "string", "description": "The ID of the shipment this LR belongs to." },
+        "orderId": { "type": "string", "description": "The ID of the order this LR belongs to." },
+        "fiscalYear": { "type": "string", "description": "The fiscal year of the LR." },
+        "sequenceNumber": { "type": "number", "description": "The sequence number within the fiscal year." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of generation." }
+      },
+      "required": ["lrNumber", "shipmentId", "fiscalYear", "sequenceNumber", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/vehicles": { "schema": "Vehicle", "description": "Collection of vehicles." },
+    "/drivers": { "schema": "Driver", "description": "Collection of drivers." },
+    "/shipments": { "schema": "Shipment", "description": "Collection of shipments." },
+    "/orders": { "schema": "Order", "description": "Collection of orders." },
+    "/expenses": { "schema": "Expense", "description": "Collection of expenses." },
+    "/users": { "schema": "User", "description": "Collection of users." },
+    "/lr_sequences": { "schema": "LR_Sequence", "description": "Collection of LR sequences per fiscal year." },
+    "/lrs": { "schema": "LR", "description": "Collection of generated LRs." }
+  }
+}
