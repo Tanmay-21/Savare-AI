@@ -19,11 +19,15 @@ import countersNext from './api/counters/next.js';
 
 const app = express();
 
-app.use(cors({
+const corsOptions = {
   origin: process.env.FRONTEND_URL || true,
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // handle preflight for all routes
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
