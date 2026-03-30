@@ -50,7 +50,8 @@ export async function apiFetch<T = any>(path: string, options?: RequestInit & { 
     }
   }
 
-  const res = await fetch(path, {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
+  const res = await fetch(`${baseUrl}${path}`, {
     ...options,
     body,
     headers: {

@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
 
 // In-memory rate limiter: max 5 demo sessions per IP per hour.
@@ -23,7 +23,7 @@ function isRateLimited(ip: string): boolean {
 
 // Creates a real anonymous Supabase auth user for demo sessions.
 // Returns a JWT — all other API endpoints work identically for demo users.
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

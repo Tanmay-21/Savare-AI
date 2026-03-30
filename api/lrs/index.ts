@@ -1,9 +1,9 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
 import { requireAuth } from '../lib/auth';
 import { ApiError } from '../lib/validate';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request, res: Response) {
   try {
     const user = await requireAuth(req);
 

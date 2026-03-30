@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { supabase } from '../lib/supabase';
 import { requireAuth } from '../lib/auth';
@@ -25,7 +25,7 @@ const CreateExpenseSchema = z.object({
   description: z.string().max(1000).optional(),
 });
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request, res: Response) {
   try {
     const user = await requireAuth(req);
 

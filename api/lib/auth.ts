@@ -1,4 +1,4 @@
-import type { VercelRequest } from '@vercel/node';
+import type { Request } from 'express';
 import { supabase } from './supabase';
 import { ApiError } from './validate';
 
@@ -21,7 +21,7 @@ export interface AuthUser {
   updated_at: string;
 }
 
-export async function requireAuth(req: VercelRequest): Promise<AuthUser> {
+export async function requireAuth(req: Request): Promise<AuthUser> {
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (!token) throw new ApiError(401, 'Unauthorized');
 

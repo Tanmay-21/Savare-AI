@@ -1,0 +1,3 @@
+# API runs on Railway — Vercel only hosts the static frontend
+api/
+server.ts

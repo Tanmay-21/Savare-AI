@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { supabase } from '../lib/supabase';
 import { requireAuth } from '../lib/auth';
@@ -16,10 +16,10 @@ const UpdateVehicleSchema = z.object({
   puc_expiry: z.string().date().optional(),
 });
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request, res: Response) {
   try {
     const user = await requireAuth(req);
-    const { id } = req.query as { id: string };
+    const id = req.params.id;
 
     if (req.method === 'GET') {
       const { data, error } = await supabase

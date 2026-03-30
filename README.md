@@ -6,7 +6,7 @@
 
 A full-stack logistics SPA for Indian fleet owners and Custom House Agents (CHA). Manage orders, shipments, vehicles, drivers, lorry receipts (LRs), and expenses — with Excel and PDF report exports.
 
-**Stack:** React 19 + Vite (frontend) · Vercel Serverless Functions (API) · Supabase Auth + PostgreSQL (data)
+**Stack:** React 19 + Vite (frontend, Vercel) · Express on Railway (API) · Supabase Auth + PostgreSQL (data)
 
 ---
 
@@ -17,12 +17,8 @@ A full-stack logistics SPA for Indian fleet owners and Custom House Agents (CHA)
 | Tool | Version | Purpose |
 |------|---------|---------|
 | Node.js | 18+ | Runtime |
-| Vercel CLI | latest | Runs API functions locally alongside Vite |
 | Supabase account | — | Auth + database |
-
-```bash
-npm install -g vercel
-```
+| Railway account | — | API server hosting (production only) |
 
 ### 1. Create a Supabase project
 
@@ -232,36 +228,54 @@ In your Supabase project:
 cp .env.local.example .env.local
 ```
 
-Edit `.env.local`:
+Edit `.env.local` with your values:
 
 ```
+# Supabase — browser-safe (embedded in the React bundle)
 VITE_SUPABASE_URL=https://<your-project-ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=<your-anon-key>
+
+# Supabase — server-only (never expose to the browser)
 SUPABASE_URL=https://<your-project-ref>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+
+# Leave empty in local dev — Vite proxies /api/* to localhost:3001 automatically
+VITE_API_BASE_URL=
 ```
 
-> **Security:** `VITE_*` variables are embedded in the browser bundle — only the **anon key** should go there. The **service role key** is server-only and must never be in a `VITE_` variable.
+**Where to find these values:**
 
-### 5. Link Vercel project and start dev server
+| Variable | Location in Supabase |
+|----------|----------------------|
+| `VITE_SUPABASE_URL` / `SUPABASE_URL` | Project → Settings → API → **Project URL** |
+| `VITE_SUPABASE_ANON_KEY` | Project → Settings → API → **Project API keys** → `anon public` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Project → Settings → API → **Project API keys** → `service_role secret` |
 
-The API functions in `api/` are Vercel Serverless Functions and require the Vercel CLI to run locally (plain `npm run dev` only starts Vite and cannot serve `api/`):
+> **Security:** `VITE_*` variables are embedded in the browser bundle — only the **anon key** belongs there. The **service role key** bypasses Row Level Security and must never go in a `VITE_` variable.
+
+### 5. Start the dev servers
+
+The API runs as a standalone Express server on port 3001. Vite proxies all `/api/*` requests to it automatically — no extra config needed.
+
+Open two terminal tabs:
 
 ```bash
-vercel link          # one-time: connects your local repo to a Vercel project
-vercel env pull      # pulls env vars from Vercel to .env.local (skip if using step 4 above)
-vercel dev           # starts Vite + API functions on http://localhost:3000
+# Terminal 1 — Express API server (port 3001)
+npm start
+
+# Terminal 2 — Vite frontend (port 3000)
+npm run dev
 ```
 
-Alternatively, if you only need to work on the frontend UI (no API calls):
-
-```bash
-npm run dev          # Vite only, http://localhost:3000 — API calls will 404
-```
+Visit `http://localhost:3000`. API calls go through Vite's proxy to Express.
 
 ---
 
 ## Production Deployment
+
+The app splits into two services:
+- **Frontend** → Vercel (static SPA, free)
+- **API** → Railway (Express server, free hobby tier)
 
 ### 1. Push to GitHub
 
@@ -270,25 +284,38 @@ git remote add origin https://github.com/<your-org>/<your-repo>.git
 git push -u origin main
 ```
 
-### 2. Import project to Vercel
+### 2. Deploy the API to Railway
 
-1. Go to [vercel.com/new](https://vercel.com/new) → **Import Git Repository**
-2. Select your repo
-3. Framework preset: **Vite** (auto-detected)
-4. Leave **Build Command** and **Output Directory** at defaults (`vite build` / `dist`)
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
+2. Select your repository
+3. Railway auto-detects Node.js. Set the **Start Command** to:
+   ```
+   npm start
+   ```
+4. In **Variables**, add:
 
-### 3. Set environment variables in Vercel
+   | Variable | Value |
+   |----------|-------|
+   | `SUPABASE_URL` | Your Supabase project URL |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase `service_role` secret key |
+   | `FRONTEND_URL` | Your Vercel app URL (e.g. `https://your-app.vercel.app`) — used for CORS |
 
-In your Vercel project → **Settings → Environment Variables**, add:
+5. After deploy, go to **Settings → Networking** → **Generate Domain** to get a public URL like `https://your-app.up.railway.app`
 
-| Variable | Environment | Value |
-|----------|-------------|-------|
-| `VITE_SUPABASE_URL` | Production, Preview | Your Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Production, Preview | Supabase `anon` public key |
-| `SUPABASE_URL` | Production, Preview | Your Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Production, Preview | Supabase `service_role` secret key |
+### 3. Deploy the frontend to Vercel
 
-> The service role key has full database access — treat it as a secret and never expose it client-side.
+1. Go to [vercel.com/new](https://vercel.com/new) → **Import Git Repository** → select your repo
+2. Framework preset: **Vite** (auto-detected)
+3. Leave **Build Command** and **Output Directory** at defaults (`vite build` / `dist`)
+4. In **Environment Variables**, add:
+
+   | Variable | Value |
+   |----------|-------|
+   | `VITE_SUPABASE_URL` | Your Supabase project URL |
+   | `VITE_SUPABASE_ANON_KEY` | Supabase `anon` public key |
+   | `VITE_API_BASE_URL` | Your Railway URL, e.g. `https://your-app.up.railway.app` |
+
+5. Click **Deploy**
 
 ### 4. Update Supabase Auth URLs for production
 
@@ -296,13 +323,11 @@ In Supabase → **Authentication → URL Configuration**:
 - **Site URL**: `https://your-app.vercel.app`
 - **Redirect URLs**: add `https://your-app.vercel.app/**`
 
-### 5. Deploy
+### 5. Redeploy Vercel with the Railway URL
 
-Vercel automatically deploys every push to `main`. Trigger a manual deploy:
+After Railway gives you a domain (step 2.5), go back to your Vercel project → **Settings → Environment Variables** → update `VITE_API_BASE_URL` with the Railway URL, then redeploy.
 
-```bash
-vercel --prod
-```
+Every subsequent push to `main` deploys both services automatically.
 
 ---
 
@@ -312,9 +337,9 @@ vercel --prod
 | Command | Description |
 |---------|-------------|
 | `npm install` | Install dependencies |
-| `npm run dev` | Start Vite dev server on port 3000 (frontend only — no API functions) |
-| `vercel dev` | Start Vite + Vercel API functions on port 3000 (full local stack) |
-| `npm run build` | Production build, outputs to `dist/` |
+| `npm start` | Start Express API server on port 3001 |
+| `npm run dev` | Start Vite frontend on port 3000 (proxies /api/* to port 3001) |
+| `npm run build` | Production build of the frontend, outputs to `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run lint` | TypeScript type-check (`tsc --noEmit`) |
 | `npm run clean` | Delete `dist/` |
@@ -330,10 +355,12 @@ vercel --prod
 <!-- AUTO-GENERATED -->
 | Variable | Required | Where | Description |
 |----------|----------|-------|-------------|
-| `VITE_SUPABASE_URL` | Yes | Browser + Server | Supabase project URL (safe for client) |
+| `VITE_SUPABASE_URL` | Yes | Browser | Supabase project URL (safe for client) |
 | `VITE_SUPABASE_ANON_KEY` | Yes | Browser | Supabase anonymous/public key (safe for client) |
-| `SUPABASE_URL` | Yes | Server only | Supabase project URL (for API functions) |
+| `VITE_API_BASE_URL` | Yes (prod) | Browser | Railway API URL — leave empty in local dev |
+| `SUPABASE_URL` | Yes | Server only | Supabase project URL (for the Express API) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server only | Supabase service role key — **never expose to browser** |
+| `FRONTEND_URL` | Yes (prod) | Server only | Vercel app URL — used for CORS on the Railway server |
 <!-- AUTO-GENERATED -->
 
 ---
@@ -341,7 +368,7 @@ vercel --prod
 ## Project Structure
 
 ```
-├── api/                    # Vercel Serverless Functions (Node.js / TypeScript)
+├── api/                    # Express route handlers (Node.js / TypeScript)
 │   ├── lib/
 │   │   ├── auth.ts         # requireAuth() — JWT validation + profile fetch
 │   │   ├── supabase.ts     # Server-side Supabase client (service role)
@@ -355,6 +382,8 @@ vercel --prod
 │   ├── expenses/           # CRUD /api/expenses + /api/expenses/:id
 │   ├── lrs/                # GET /api/lrs, POST /api/lrs/generate
 │   └── counters/next.ts    # POST /api/counters/next
+│
+├── server.ts               # Express entry point — mounts all routes, CORS, JSON parsing
 │
 ├── src/                    # React SPA (Vite)
 │   ├── App.tsx             # Route guards — uses useUser() hook
@@ -375,6 +404,6 @@ vercel --prod
 │   └── CODEMAPS/           # Architecture reference maps
 │
 ├── .env.local.example      # Environment variable template
-├── vercel.json             # Vercel config (rewrites api/* → serverless functions)
-└── vite.config.ts          # Vite build config
+├── vercel.json             # Vercel config (SPA fallback rewrite)
+└── vite.config.ts          # Vite build config + /api proxy for local dev
 ```
