@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import usersMe from './api/users/me.js';
 import usersRegister from './api/users/register.js';
 import authDemo from './api/auth/demo.js';
@@ -19,15 +18,20 @@ import countersNext from './api/counters/next.js';
 
 const app = express();
 
-const corsOptions = {
-  origin: process.env.FRONTEND_URL || true,
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-};
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowed = process.env.FRONTEND_URL;
+  if (!allowed || origin === allowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin ?? '*');
+  }
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // handle preflight for all routes
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
