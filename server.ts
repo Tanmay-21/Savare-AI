@@ -72,7 +72,10 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) => {
+  console.log('[LOG] Health check responder hit');
+  res.json({ ok: true, timestamp: new Date().toISOString() });
+});
 
 app.all('/api/users/me', usersMe);
 app.all('/api/users/register', usersRegister);
@@ -91,7 +94,14 @@ app.all('/api/lrs', lrsIndex);
 app.all('/api/lrs/generate', lrsGenerate);
 app.all('/api/counters/next', countersNext);
 
+// 4. Catch-all 404 handler (Logs what went wrong)
+app.use((req, res) => {
+  console.log(`[404 ERROR] Browser hit: ${req.method} ${req.url}`);
+  res.status(404).json({ error: 'Endpoint not found', path: req.url });
+});
+
 const port = process.env.PORT || 3001;
 app.listen(port, () => {
   console.log(`--- API SYSTEM ONLINE ON PORT ${port} ---`);
+  console.log(`--- URL: https://savare-ai.up.railway.app ---`);
 });
