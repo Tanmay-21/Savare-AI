@@ -1,4 +1,7 @@
+import dotenv from 'dotenv';
 import express from 'express';
+
+dotenv.config();
 import usersMe from './api/users/me.js';
 import usersRegister from './api/users/register.js';
 import authDemo from './api/auth/demo.js';
@@ -23,13 +26,19 @@ app.use((req, res, next) => {
   const allowedStr = process.env.FRONTEND_URL;
   
   if (origin) {
-    const allowedOrigins = allowedStr ? allowedStr.split(',').map(o => o.trim().replace(/\/$/, '')) : [];
-    const normalizedOrigin = origin.replace(/\/$/, '');
+    const allowedOrigins = allowedStr ? allowedStr.split(',').map(o => o.trim().toLowerCase().replace(/\/$/, '')) : [];
+    const normalizedOrigin = origin.toLowerCase().replace(/\/$/, '');
     
     // Allow if no restriction is set OR if the origin matches our list
-    if (!allowedStr || allowedOrigins.includes(normalizedOrigin)) {
+    // Also support matching by domain name if protocol is omitted in config
+    const isAllowed = !allowedStr || allowedOrigins.includes(normalizedOrigin) || 
+                     allowedOrigins.some(ao => !ao.includes('://') && normalizedOrigin.endsWith(ao));
+
+    if (isAllowed) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+      console.warn(`[CORS] Rejected origin: ${origin}. Expected one of: ${allowedStr || 'ANY'}`);
     }
   }
 
