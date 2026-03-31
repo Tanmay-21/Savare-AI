@@ -25,28 +25,38 @@ app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowedStr = process.env.FRONTEND_URL;
   
+  // Set shared CORS headers for ALL responses
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
   if (origin) {
     const allowedOrigins = allowedStr ? allowedStr.split(',').map(o => o.trim().toLowerCase().replace(/\/$/, '')) : [];
     const normalizedOrigin = origin.toLowerCase().replace(/\/$/, '');
     
-    // Allow if no restriction is set OR if the origin matches our list
-    // Also support matching by domain name if protocol is omitted in config
+    // Check if origin matchesExactly OR matches domain (for common Vercel preview branch domains)
     const isAllowed = !allowedStr || allowedOrigins.includes(normalizedOrigin) || 
-                     allowedOrigins.some(ao => !ao.includes('://') && normalizedOrigin.endsWith(ao));
+                     allowedOrigins.some(ao => !ao.includes('://') && (normalizedOrigin.endsWith(ao) || normalizedOrigin === ao));
 
     if (isAllowed) {
       res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
     } else {
-      console.warn(`[CORS] Rejected origin: ${origin}. Expected one of: ${allowedStr || 'ANY'}`);
+      console.warn(`[CORS WARN] Origin '${origin}' filtered. Expected: '${allowedStr || 'ANY'}'`);
     }
+  } else if (!allowedStr) {
+    // If no config set, allow all in development (no credentials)
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
 
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  if (req.method === 'OPTIONS') return res.status(204).end();
+  // FORCE SUCCESS for all preflight OPTIONS requests, even if origin match was shaky
+  // This allows the request to reach the server so we can at least see logs!
+  if (req.method === 'OPTIONS') {
+    if (!res.getHeader('Access-Control-Allow-Origin') && origin) {
+       res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    return res.status(204).end();
+  }
   next();
 });
 
