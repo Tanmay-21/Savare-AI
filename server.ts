@@ -21,11 +21,24 @@ import countersNext from './api/counters/next.js';
 
 const app = express();
 
+// 1. Diagnostic Startup Logs
+console.log('--- SERVER BOOTING ---');
+console.log('FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
+console.log('PORT:', process.env.PORT || 3001);
+
+// 2. Global Request Logger (Catch everything)
+app.use((req, res, next) => {
+  const logMsg = `[LOG] ${req.method} ${req.url} | Origin: ${req.headers.origin || 'none'}`;
+  console.log(logMsg);
+  next();
+});
+
+// 3. Robust CORS Middleware
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowedStr = process.env.FRONTEND_URL;
   
-  // Set shared CORS headers for ALL responses
+  // Set fundamental headers for EVERY response
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -35,25 +48,22 @@ app.use((req, res, next) => {
     const allowedOrigins = allowedStr ? allowedStr.split(',').map(o => o.trim().toLowerCase().replace(/\/$/, '')) : [];
     const normalizedOrigin = origin.toLowerCase().replace(/\/$/, '');
     
-    // Check if origin matchesExactly OR matches domain (for common Vercel preview branch domains)
     const isAllowed = !allowedStr || allowedOrigins.includes(normalizedOrigin) || 
                      allowedOrigins.some(ao => !ao.includes('://') && (normalizedOrigin.endsWith(ao) || normalizedOrigin === ao));
 
     if (isAllowed) {
       res.setHeader('Access-Control-Allow-Origin', origin);
     } else {
-      console.warn(`[CORS WARN] Origin '${origin}' filtered. Expected: '${allowedStr || 'ANY'}'`);
+      console.log(`[CORS REJECT] ${origin} not matched in '${allowedStr || 'ANY'}'`);
     }
   } else if (!allowedStr) {
-    // If no config set, allow all in development (no credentials)
     res.setHeader('Access-Control-Allow-Origin', '*');
   }
 
-  // FORCE SUCCESS for all preflight OPTIONS requests, even if origin match was shaky
-  // This allows the request to reach the server so we can at least see logs!
   if (req.method === 'OPTIONS') {
-    if (!res.getHeader('Access-Control-Allow-Origin') && origin) {
-       res.setHeader('Access-Control-Allow-Origin', origin);
+    // Force allow the origin on preflights so the browser lets the request through to see real logs
+    if (origin && !res.getHeader('Access-Control-Allow-Origin')) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
     }
     return res.status(204).end();
   }
@@ -83,5 +93,5 @@ app.all('/api/counters/next', countersNext);
 
 const port = process.env.PORT || 3001;
 app.listen(port, () => {
-  console.log(`API server running on port ${port}`);
+  console.log(`--- API SYSTEM ONLINE ON PORT ${port} ---`);
 });
