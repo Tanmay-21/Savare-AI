@@ -20,14 +20,23 @@ const app = express();
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  const allowed = process.env.FRONTEND_URL;
-  if (!allowed || origin === allowed) {
-    res.setHeader('Access-Control-Allow-Origin', origin ?? '*');
+  const allowedStr = process.env.FRONTEND_URL;
+  
+  if (origin) {
+    const allowedOrigins = allowedStr ? allowedStr.split(',').map(o => o.trim().replace(/\/$/, '')) : [];
+    const normalizedOrigin = origin.replace(/\/$/, '');
+    
+    // Allow if no restriction is set OR if the origin matches our list
+    if (!allowedStr || allowedOrigins.includes(normalizedOrigin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
   }
+
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
 });
