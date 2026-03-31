@@ -1,2 +1,7 @@
+[build]
+buildCommand = "npm run build:server"
+
 [deploy]
 startCommand = "node dist-server/server.cjs"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
