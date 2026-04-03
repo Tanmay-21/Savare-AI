@@ -25,6 +25,12 @@ const CreateExpenseSchema = z.object({
   description: z.string().max(1000).optional(),
 });
 
+export const BatchExpenseSchema = z.object({
+  expenses: z.array(CreateExpenseSchema).min(1),
+  // When provided, the shipment is locked after all expenses are inserted.
+  lock_shipment_id: z.string().uuid().optional(),
+});
+
 export default async function handler(req: Request, res: Response) {
   try {
     const user = await requireAuth(req);
@@ -41,6 +47,54 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (req.method === 'POST') {
+      // Batch insert: body is { expenses: [...], lock_shipment_id? }
+      if (Array.isArray(req.body?.expenses)) {
+        const { expenses, lock_shipment_id } = parseBody(BatchExpenseSchema, req.body);
+
+        // HIGH-1: Verify trip_id ownership — the trip must belong to this user.
+        const tripId = expenses[0]?.trip_id;
+        if (tripId) {
+          const { data: trip, error: tripError } = await supabase
+            .from('shipments')
+            .select('id')
+            .eq('id', tripId)
+            .eq('user_id', user.id)
+            .single();
+          if (tripError || !trip) throw new ApiError(403, 'Trip not found or access denied');
+        }
+
+        // HIGH-2: lock_shipment_id must refer to the same trip as the expenses.
+        if (lock_shipment_id && tripId && lock_shipment_id !== tripId) {
+          throw new ApiError(400, 'lock_shipment_id must match the trip referenced by the expenses');
+        }
+
+        const rows = expenses.map((e) => ({ ...e, user_id: user.id }));
+        const { data, error } = await supabase
+          .from('expenses')
+          .insert(rows)
+          .select();
+
+        if (error) throw error;
+
+        let lockFailed = false;
+        if (lock_shipment_id) {
+          const { error: lockError } = await supabase
+            .from('shipments')
+            .update({ is_locked: true, updated_at: new Date().toISOString() })
+            .eq('id', lock_shipment_id)
+            .eq('user_id', user.id);
+
+          if (lockError) {
+            // Expenses are already inserted — locking is idempotent and can be retried.
+            // Signal the partial failure so the client can warn the user.
+            lockFailed = true;
+          }
+        }
+
+        return res.status(201).json({ data, lockFailed });
+      }
+
+      // Single insert (existing behaviour)
       const body = parseBody(CreateExpenseSchema, req.body);
       const { data, error } = await supabase
         .from('expenses')

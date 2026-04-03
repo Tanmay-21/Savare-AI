@@ -47,7 +47,6 @@ export default function LRManagement() {
       setVehicles(vehicleList);
       setLrs(lrList);
     } catch (err) {
-      console.error('Error fetching LR data:', err);
       if (!fetchErrorShown.current) {
         fetchErrorShown.current = true;
         showToast(parseApiError(err), 'error');
@@ -77,7 +76,6 @@ export default function LRManagement() {
       fetchErrorShown.current = false;
       showToast('LR generated successfully.', 'success');
     } catch (err) {
-      console.error('Error generating LR:', err);
       showToast(parseApiError(err), 'error');
     } finally {
       setGenerating(null);
@@ -85,7 +83,9 @@ export default function LRManagement() {
   };
 
   const generateBulkLRs = async (orderId: string) => {
-    const orderShipments = shipments.filter(s => s.orderId === orderId && !s.lrNumber);
+    const orderShipments = shipments.filter(
+      s => s.orderId === orderId && !s.lrNumber && s.status === 'delivered'
+    );
     if (orderShipments.length === 0) return;
 
     setBulkGenerating(true);
@@ -100,7 +100,6 @@ export default function LRManagement() {
       await fetchData();
       showToast('All LRs generated successfully.', 'success');
     } catch (err) {
-      console.error('Error generating bulk LRs:', err);
       await fetchData();
       showToast(parseApiError(err), 'error');
     } finally {
@@ -115,13 +114,16 @@ export default function LRManagement() {
       (s.billingPartyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (s.lrNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     
-    const matchesTab = activeTab === 'pending' ? !s.lrNumber : !!s.lrNumber;
+    const matchesTab =
+      activeTab === 'pending'
+        ? !s.lrNumber && s.status === 'delivered'
+        : !!s.lrNumber;
     
     return matchesSearch && matchesTab;
   });
 
-  const pendingOrders = orders.filter(o => 
-    shipments.some(s => s.orderId === o.id && !s.lrNumber)
+  const pendingOrders = orders.filter(o =>
+    shipments.some(s => s.orderId === o.id && !s.lrNumber && s.status === 'delivered')
   );
 
   return (
@@ -140,7 +142,9 @@ export default function LRManagement() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {pendingOrders.map(order => {
-              const pendingCount = shipments.filter(s => s.orderId === order.id && !s.lrNumber).length;
+              const pendingCount = shipments.filter(
+                s => s.orderId === order.id && !s.lrNumber && s.status === 'delivered'
+              ).length;
               return (
                 <div key={order.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
                   <div className="flex justify-between items-start mb-4">
@@ -216,7 +220,7 @@ export default function LRManagement() {
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Route</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Container</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  {activeTab === 'pending' ? 'Status' : 'LR Number'}
+                  {activeTab === 'pending' ? 'Trip Status' : 'LR Number'}
                 </th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Action</th>
               </tr>
@@ -258,8 +262,8 @@ export default function LRManagement() {
                     </td>
                     <td className="px-6 py-4">
                       {activeTab === 'pending' ? (
-                        <span className="px-2 py-1 bg-orange-50 text-orange-600 text-[10px] font-black rounded-lg uppercase border border-orange-100">
-                          Pending
+                        <span className="px-2 py-1 bg-accent/10 text-accent text-[10px] font-black rounded-lg uppercase border border-accent/20">
+                          Delivered
                         </span>
                       ) : (
                         <div className="flex flex-col">

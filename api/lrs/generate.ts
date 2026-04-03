@@ -5,7 +5,7 @@ import { requireAuth } from '../lib/auth';
 import { parseBody, ApiError } from '../lib/validate';
 import { getFiscalYear } from '../../src/lib/fiscalYear';
 
-const GenerateLRSchema = z.object({
+export const GenerateLRSchema = z.object({
   shipment_id: z.string().uuid(),
   order_id: z.string().uuid().optional(),
 });
@@ -17,6 +17,26 @@ export default async function handler(req: Request, res: Response) {
   try {
     const user = await requireAuth(req);
     const { shipment_id, order_id } = parseBody(GenerateLRSchema, req.body);
+
+    // Guard: LR generation is only allowed for delivered shipments.
+    const { data: shipment, error: shipmentError } = await supabase
+      .from('shipments')
+      .select('status')
+      .eq('id', shipment_id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (shipmentError || !shipment) {
+      throw new ApiError(404, 'Shipment not found');
+    }
+
+    if (shipment.status !== 'delivered') {
+      throw new ApiError(
+        400,
+        `LR can only be generated for delivered shipments. Current status: ${shipment.status}`
+      );
+    }
+
     const fiscalYear = getFiscalYear();
 
     // Atomically get next LR sequence number

@@ -122,55 +122,42 @@ export default function Shipments() {
     setSubmitting(true);
     try {
       const now = new Date().toISOString();
-      const updatedFormData = {
-        ...formData,
-        updatedAt: now
-      };
+      const updatedFormData = { ...formData };
+      const isMarkingDelivered =
+        updatedFormData.status === 'delivered' && editingShipment.status !== 'delivered';
 
-      if (updatedFormData.status === 'delivered' && editingShipment.status !== 'delivered') {
-        if (!updatedFormData.actualArrival) {
-          updatedFormData.actualArrival = now;
-        }
-        setSelectedTripForExpense({ ...editingShipment, ...updatedFormData });
-        setExpenseItems([{ category: 'Fuel', amount: '', description: '' }]);
-        setIsExpenseModalOpen(true);
-
-        if (updatedFormData.vehicleId) {
-          await apiFetch(`/api/vehicles/${updatedFormData.vehicleId}`, {
-            method: 'PATCH', body: JSON.stringify({ isAvailable: true }),
-          });
-        }
-      } else if (updatedFormData.status === 'in-transit' && editingShipment.status !== 'in-transit') {
-        if (updatedFormData.vehicleId) {
-          await apiFetch(`/api/vehicles/${updatedFormData.vehicleId}`, {
-            method: 'PATCH', body: JSON.stringify({ isAvailable: false }),
-          });
-        }
+      if (isMarkingDelivered && !updatedFormData.actualArrival) {
+        updatedFormData.actualArrival = now;
       }
 
-      if (updatedFormData.vehicleId !== editingShipment.vehicleId) {
-        if (editingShipment.vehicleId) {
-          await apiFetch(`/api/vehicles/${editingShipment.vehicleId}`, {
-            method: 'PATCH', body: JSON.stringify({ isAvailable: true }),
-          });
-        }
-        if (updatedFormData.vehicleId && updatedFormData.status === 'in-transit') {
-          await apiFetch(`/api/vehicles/${updatedFormData.vehicleId}`, {
-            method: 'PATCH', body: JSON.stringify({ isAvailable: false }),
-          });
-        }
-      }
+      // Pass previousVehicleId so the backend can atomically release the old vehicle.
+      // Vehicle availability changes happen AFTER the shipment update in the API,
+      // so a validation failure never leaves a vehicle stuck as unavailable.
+      const previousVehicleId =
+        updatedFormData.vehicleId !== editingShipment.vehicleId
+          ? (editingShipment.vehicleId || null)
+          : null;
 
-      await apiFetch(`/api/shipments/${editingShipment.id}`, {
+      const result = await apiFetch(`/api/shipments/${editingShipment.id}`, {
         method: 'PATCH',
-        body: JSON.stringify(updatedFormData),
+        body: JSON.stringify({ ...updatedFormData, previousVehicleId }),
       });
       await fetchData();
       fetchErrorShown.current = false;
       closeModal();
       showToast('Shipment updated.', 'success');
+      if (result?.vehicleUpdateFailed) {
+        showToast('Vehicle availability could not be refreshed — please check vehicle status.', 'error');
+      }
+
+      // Open expense modal only after the PATCH has confirmed success — prevents
+      // the user entering expenses for a trip that failed to update to "delivered".
+      if (isMarkingDelivered) {
+        setSelectedTripForExpense({ ...editingShipment, ...updatedFormData });
+        setExpenseItems([{ category: 'Fuel', amount: '', description: '' }]);
+        setIsExpenseModalOpen(true);
+      }
     } catch (err) {
-      console.error('Error updating shipment:', err);
       showToast(parseApiError(err), 'error');
     } finally {
       setSubmitting(false);
@@ -182,31 +169,42 @@ export default function Shipments() {
     if (!selectedTripForExpense) return;
     setSubmitting(true);
     try {
-      for (const item of expenseItems) {
-        if (Number(item.amount) > 0) {
-          await apiFetch('/api/expenses', {
-            method: 'POST',
-            body: JSON.stringify({
-              tripId: selectedTripForExpense.id,
-              vehicleId: selectedTripForExpense.vehicleId,
-              vehicleNumber: selectedTripForExpense.vehicleNumber,
-              driverId: selectedTripForExpense.driverId,
-              driverName: selectedTripForExpense.driverName,
-              category: item.category,
-              amount: Number(item.amount),
-              description: item.description,
-              date: new Date().toISOString().split('T')[0],
-              status: 'pending',
-              paymentMethod: 'online',
-            }),
-          });
-        }
-      }
+      const today = new Date().toISOString().split('T')[0];
+      const validExpenses = expenseItems
+        .filter((item) => Number(item.amount) > 0)
+        .map((item) => ({
+          tripId: selectedTripForExpense.id,
+          vehicleId: selectedTripForExpense.vehicleId,
+          vehicleNumber: selectedTripForExpense.vehicleNumber,
+          driverId: selectedTripForExpense.driverId,
+          driverName: selectedTripForExpense.driverName,
+          category: item.category,
+          amount: Number(item.amount),
+          description: item.description,
+          date: today,
+          status: 'pending',
+          paymentMethod: 'online',
+        }));
 
-      await apiFetch(`/api/shipments/${selectedTripForExpense.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isLocked: true }),
-      });
+      if (validExpenses.length > 0) {
+        // Single atomic call: inserts all expenses and locks the shipment together.
+        const result = await apiFetch('/api/expenses', {
+          method: 'POST',
+          body: JSON.stringify({
+            expenses: validExpenses,
+            lockShipmentId: selectedTripForExpense.id,
+          }),
+        });
+        if (result?.lockFailed) {
+          showToast('Expenses saved, but the trip could not be locked. Please try again.', 'error');
+        }
+      } else {
+        // No expenses entered — still lock the shipment.
+        await apiFetch(`/api/shipments/${selectedTripForExpense.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ isLocked: true }),
+        });
+      }
 
       await fetchData();
       setIsExpenseModalOpen(false);
@@ -214,7 +212,6 @@ export default function Shipments() {
       setExpenseItems([{ category: 'Fuel', amount: '', description: '' }]);
       showToast('Expenses saved for this trip.', 'success');
     } catch (err) {
-      console.error('Error submitting expense:', err);
       showToast(parseApiError(err), 'error');
     } finally {
       setSubmitting(false);
@@ -509,24 +506,26 @@ export default function Shipments() {
                           <button
                             onClick={async () => {
                               try {
+                                // Single atomic call: backend releases the vehicle after
+                                // successfully updating the shipment status.
                                 await apiFetch(`/api/shipments/${shipment.id}`, {
                                   method: 'PATCH',
                                   body: JSON.stringify({
                                     status: 'delivered',
                                     actualArrival: new Date().toISOString(),
+                                    vehicleId: shipment.vehicleId || null,
                                   }),
                                 });
-                                if (shipment.vehicleId) {
-                                  await apiFetch(`/api/vehicles/${shipment.vehicleId}`, {
-                                    method: 'PATCH',
-                                    body: JSON.stringify({ isAvailable: true }),
-                                  });
-                                }
-                                setSelectedTripForExpense(shipment);
+                                // Refresh state so the expense modal receives the
+                                // updated shipment (status: delivered, actualArrival set).
+                                await fetchData();
+                                fetchErrorShown.current = false;
+                                setSelectedTripForExpense(
+                                  shipments.find(s => s.id === shipment.id) ?? shipment
+                                );
                                 setExpenseItems([{ category: 'Fuel', amount: '', description: '' }]);
                                 setIsExpenseModalOpen(true);
                               } catch (err) {
-                                console.error('Error marking shipment as delivered:', err);
                                 showToast(parseApiError(err), 'error');
                               }
                             }}
@@ -552,17 +551,19 @@ export default function Shipments() {
                         >
                           <IndianRupee className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => {
-                            const order = orders.find(o => o.id === shipment.orderId);
-                            const vehicle = vehicles.find(v => v.id === shipment.vehicleId);
-                            downloadLR(shipment, order, vehicle);
-                          }}
-                          title="Download LR"
-                          className="p-2 text-slate-400 hover:text-primary hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all"
-                        >
-                          <FileText className="w-4 h-4" />
-                        </button>
+                        {shipment.lrNumber && (
+                          <button
+                            onClick={() => {
+                              const order = orders.find(o => o.id === shipment.orderId);
+                              const vehicle = vehicles.find(v => v.id === shipment.vehicleId);
+                              downloadLR(shipment, order, vehicle);
+                            }}
+                            title="Download LR"
+                            className="p-2 text-slate-400 hover:text-primary hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => openModal(shipment)}
                           className="p-2 text-slate-400 hover:text-primary hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all"
