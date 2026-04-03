@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Order, Shipment, Expense } from '../types';
 import { apiFetch } from '../lib/api';
+import { useToast } from '../contexts/ToastContext';
+import { parseApiError } from '../lib/parseApiError';
+import { FieldError, fieldErrorClass } from '../components/ui/FieldError';
 import { 
   FileText, 
   Plus, 
@@ -24,6 +27,8 @@ import { cn } from '../utils/cn';
 import * as XLSX from 'xlsx';
 
 export default function Orders() {
+  const { showToast } = useToast();
+  const fetchErrorShown = useRef(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -31,6 +36,7 @@ export default function Orders() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [dateFilter, setDateFilter] = useState<'7days' | 'custom'>('7days');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
@@ -63,6 +69,10 @@ export default function Orders() {
       setExpenses(expenseList);
     } catch (error) {
       console.error('Error fetching orders data:', error);
+      if (!fetchErrorShown.current) {
+        fetchErrorShown.current = true;
+        showToast(parseApiError(error), 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -72,7 +82,7 @@ export default function Orders() {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showToast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Auto-complete orders where all shipments are delivered
@@ -88,13 +98,32 @@ export default function Orders() {
         apiFetch(`/api/orders/${order.id}`, {
           method: 'PATCH',
           body: JSON.stringify({ status: 'completed' }),
-        }).catch((error) => console.error('Error auto-completing order:', error))
+        }).catch((error) => {
+          console.error('Error auto-completing order:', error);
+          showToast(parseApiError(error), 'error');
+        })
       )
     );
-  }, [orders, shipments]);
+  }, [orders, shipments, showToast]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!formData.billingPartyName.trim()) errors.billingPartyName = 'Billing party name is required.';
+    if (!formData.origin.trim()) errors.origin = 'Origin is required.';
+    if (!formData.destination.trim()) errors.destination = 'Destination is required.';
+    if (formData.origin.trim() && formData.destination.trim() &&
+        formData.origin.trim().toLowerCase() === formData.destination.trim().toLowerCase()) {
+      errors.destination = 'Destination must be different from origin.';
+    }
+    if (!formData.containerCount || formData.containerCount < 1) errors.containerCount = 'At least 1 container required.';
+    if (formData.containerCount > 50) errors.containerCount = 'Maximum 50 containers per order.';
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
     setSubmitting(true);
     try {
       // Create order (API atomically assigns order number and creates shipments)
@@ -135,7 +164,9 @@ export default function Orders() {
       }
 
       await fetchData();
+      fetchErrorShown.current = false;
       setIsModalOpen(false);
+      setFormErrors({});
       setFormData({
         billingPartyName: '',
         consigneeName: '',
@@ -149,32 +180,29 @@ export default function Orders() {
         yardSelection: '',
         remarks: '',
       });
+      showToast('Order created successfully.', 'success');
     } catch (error) {
       console.error('Error creating order:', error);
-      alert('Failed to create order. Please try again.');
+      showToast(parseApiError(error), 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
   const toggleOrderExpansion = (orderId: string) => {
-    const newExpanded = new Set(expandedOrders);
-    if (newExpanded.has(orderId)) {
-      newExpanded.delete(orderId);
-    } else {
-      newExpanded.add(orderId);
-    }
-    setExpandedOrders(newExpanded);
+    setExpandedOrders((prev) => {
+      const next = new Set(prev);
+      next.has(orderId) ? next.delete(orderId) : next.add(orderId);
+      return next;
+    });
   };
 
   const toggleOrderSelection = (orderId: string) => {
-    const newSelected = new Set(selectedOrders);
-    if (newSelected.has(orderId)) {
-      newSelected.delete(orderId);
-    } else {
-      newSelected.add(orderId);
-    }
-    setSelectedOrders(newSelected);
+    setSelectedOrders((prev) => {
+      const next = new Set(prev);
+      next.has(orderId) ? next.delete(orderId) : next.add(orderId);
+      return next;
+    });
   };
 
   const filterOrders = (orders: Order[]) => {
@@ -516,21 +544,22 @@ export default function Orders() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-slate-700 ml-1">Billing Party Name</label>
-                      <input 
-                        required
+                      <input
                         type="text"
                         value={formData.billingPartyName}
                         onChange={(e) => {
                           const val = e.target.value;
-                          setFormData({ 
-                            ...formData, 
+                          setFormData({
+                            ...formData,
                             billingPartyName: val,
                             consigneeName: formData.isBillingSameAsConsignee ? val : formData.consigneeName
                           });
+                          if (formErrors.billingPartyName) setFormErrors({ ...formErrors, billingPartyName: '' });
                         }}
                         placeholder="Enter billing party name"
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all"
+                        className={`w-full px-4 py-3 bg-slate-50 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all ${formErrors.billingPartyName ? fieldErrorClass : 'border-slate-200'}`}
                       />
+                      <FieldError message={formErrors.billingPartyName} />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-slate-700 ml-1">Consignee Details</label>
@@ -578,39 +607,47 @@ export default function Orders() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-slate-700 ml-1">Origin</label>
-                      <input 
-                        required
+                      <input
                         type="text"
                         value={formData.origin}
-                        onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ ...formData, origin: e.target.value });
+                          if (formErrors.origin) setFormErrors({ ...formErrors, origin: '' });
+                        }}
                         placeholder="Pickup location"
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all"
+                        className={`w-full px-4 py-3 bg-slate-50 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all ${formErrors.origin ? fieldErrorClass : 'border-slate-200'}`}
                       />
+                      <FieldError message={formErrors.origin} />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-slate-700 ml-1">Destination</label>
-                      <input 
-                        required
+                      <input
                         type="text"
                         value={formData.destination}
-                        onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ ...formData, destination: e.target.value });
+                          if (formErrors.destination) setFormErrors({ ...formErrors, destination: '' });
+                        }}
                         placeholder="Drop location"
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all"
+                        className={`w-full px-4 py-3 bg-slate-50 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all ${formErrors.destination ? fieldErrorClass : 'border-slate-200'}`}
                       />
+                      <FieldError message={formErrors.destination} />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-slate-700 ml-1">Container Count</label>
-                      <input 
-                        required
+                      <input
                         type="number"
                         min="1"
+                        max="50"
                         value={isNaN(formData.containerCount) ? '' : formData.containerCount}
                         onChange={(e) => {
                           const val = parseInt(e.target.value);
                           setFormData({ ...formData, containerCount: isNaN(val) ? 0 : val });
+                          if (formErrors.containerCount) setFormErrors({ ...formErrors, containerCount: '' });
                         }}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all"
+                        className={`w-full px-4 py-3 bg-slate-50 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all ${formErrors.containerCount ? fieldErrorClass : 'border-slate-200'}`}
                       />
+                      <FieldError message={formErrors.containerCount} />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-slate-700 ml-1">Movement Type</label>

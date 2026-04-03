@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Driver } from '../types';
 import { apiFetch } from '../lib/api';
 import { cn } from '../utils/cn';
+import { useToast } from '../contexts/ToastContext';
+import { parseApiError } from '../lib/parseApiError';
 import { 
   Users, 
   Plus, 
@@ -24,6 +26,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Drivers() {
+  const { showToast } = useToast();
+  const fetchErrorShown = useRef(false);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
@@ -49,6 +53,10 @@ export default function Drivers() {
       setDrivers(driverList);
     } catch (error) {
       console.error('Error fetching drivers:', error);
+      if (!fetchErrorShown.current) {
+        fetchErrorShown.current = true;
+        showToast(parseApiError(error), 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -58,7 +66,7 @@ export default function Drivers() {
     fetchDrivers();
     const interval = setInterval(fetchDrivers, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showToast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,9 +84,12 @@ export default function Drivers() {
         });
       }
       await fetchDrivers();
+      fetchErrorShown.current = false;
       closeModal();
+      showToast(editingDriver ? 'Driver updated.' : 'Driver added.', 'success');
     } catch (err) {
       console.error('Error saving driver:', err);
+      showToast(parseApiError(err), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -91,8 +102,10 @@ export default function Drivers() {
       await apiFetch(`/api/drivers/${deleteId}`, { method: 'DELETE' });
       setDeleteId(null);
       await fetchDrivers();
+      showToast('Driver deleted.', 'success');
     } catch (err) {
       console.error('Error deleting driver:', err);
+      showToast(parseApiError(err), 'error');
     } finally {
       setSubmitting(false);
     }

@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../lib/api';
+import { useToast } from '../contexts/ToastContext';
+import { parseApiError } from '../lib/parseApiError';
 import { Truck, Users, Package, TrendingUp, Clock, MapPin, AlertCircle, CheckCircle2, IndianRupee, Settings, Activity, Plus, HelpCircle, ArrowRight, X, Loader2, FileText, HardHat } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Shipment, Order } from '../types';
 import { cn } from '../utils/cn';
-import { APP_NAME } from '../constants/branding';
+import { APP_NAME, SUPPORT_EMAIL, SUPPORT_PHONE } from '../constants/branding';
 import ComingSoonModal from '../components/ComingSoonModal';
 
 import { useUser } from '../hooks/useUser';
@@ -14,6 +16,8 @@ import { useUser } from '../hooks/useUser';
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useUser();
+  const { showToast } = useToast();
+  const fetchErrorShown = useRef(false);
   const [stats, setStats] = useState({
     vehicles: 0,
     drivers: 0,
@@ -53,13 +57,17 @@ export default function Dashboard() {
         });
       } catch (error) {
         console.error('Error fetching dashboard stats:', error);
+        if (!fetchErrorShown.current) {
+          fetchErrorShown.current = true;
+          showToast(parseApiError(error), 'error');
+        }
       }
     };
 
     fetchDashboard();
     const interval = setInterval(fetchDashboard, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showToast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cards = [
     { name: 'Active Fleet', value: stats.vehicles, icon: Truck, color: 'bg-primary/10 text-primary', trend: '+2 this week' },
@@ -190,7 +198,7 @@ export default function Dashboard() {
 
                   <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
                     <p className="text-sm font-bold text-slate-900 mb-2">Still need help?</p>
-                    <p className="text-xs text-slate-500">Contact our support team at <span className="text-primary font-bold">support@savare.com</span> or call <span className="text-primary font-bold">+91 98765 43210</span>.</p>
+                    <p className="text-xs text-slate-500">Contact our support team at <span className="text-primary font-bold">{SUPPORT_EMAIL}</span> or call <span className="text-primary font-bold">{SUPPORT_PHONE}</span>.</p>
                   </div>
 
                   <button

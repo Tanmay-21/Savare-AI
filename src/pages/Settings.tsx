@@ -2,16 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Shield, Bell, User, Database, Building2, Mail, Phone, MapPin, Globe, Loader2, Edit2, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiFetch } from '../lib/api';
+import { useToast } from '../contexts/ToastContext';
+import { parseApiError } from '../lib/parseApiError';
 import { supabase } from '../supabase';
 import { cn } from '../utils/cn';
 import { APP_NAME } from '../constants/branding';
+import { AppUser } from '../hooks/useUser';
+import { FieldError, fieldErrorClass } from '../components/ui/FieldError';
+
+const GSTIN_REGEX = /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 
 export default function Settings() {
-  const [userData, setUserData] = useState<any>(null);
+  const { showToast } = useToast();
+  const [userData, setUserData] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     companyName: '',
     email: '',
@@ -40,14 +48,28 @@ export default function Settings() {
           fleetSize: data.fleetSize || '',
         });
       })
-      .catch((err) => console.error('Error fetching user data:', err))
+      .catch((err) => {
+        console.error('Error fetching user data:', err);
+        showToast('Failed to load profile data. Please refresh the page.', 'error');
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [showToast]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (formData.gstin && !GSTIN_REGEX.test(formData.gstin)) {
+      errors.gstin = 'Invalid GSTIN format (e.g. 22AAAAA0000A1Z5).';
+    }
+    if (formData.pan && !PAN_REGEX.test(formData.pan)) {
+      errors.pan = 'Invalid PAN format (e.g. ABCDE1234F).';
+    }
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    setFormErrors({});
     setSubmitting(true);
-    setSuccess(false);
     try {
       const updated = await apiFetch('/api/users/me', {
         method: 'PATCH',
@@ -58,12 +80,12 @@ export default function Settings() {
           fleetSize: formData.fleetSize || undefined,
         }),
       });
-      setUserData({ ...userData, ...updated });
+      setUserData({ ...userData, ...updated } as AppUser);
       setIsEditing(false);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      showToast('Profile updated successfully.', 'success');
     } catch (err) {
       console.error('Error updating profile:', err);
+      showToast(parseApiError(err), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -85,19 +107,6 @@ export default function Settings() {
           <p className="text-slate-500 mt-1">Manage your business profile and contact information.</p>
         </div>
         <div className="flex items-center gap-3">
-          <AnimatePresence>
-            {success && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-bold border border-emerald-100"
-              >
-                <Check className="w-4 h-4" />
-                Saved Successfully
-              </motion.div>
-            )}
-          </AnimatePresence>
           {!isEditing ? (
             <button 
               onClick={() => setIsEditing(true)}
@@ -186,21 +195,29 @@ export default function Settings() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">GSTIN</label>
-                    <input 
+                    <input
                       type="text"
                       value={formData.gstin}
-                      onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all"
+                      onChange={(e) => {
+                        setFormData({ ...formData, gstin: e.target.value.toUpperCase() });
+                        if (formErrors.gstin) setFormErrors({ ...formErrors, gstin: '' });
+                      }}
+                      className={`w-full px-4 py-3 bg-slate-50 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all ${formErrors.gstin ? fieldErrorClass : 'border-slate-200'}`}
                     />
+                    <FieldError message={formErrors.gstin} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">PAN</label>
-                    <input 
+                    <input
                       type="text"
                       value={formData.pan}
-                      onChange={(e) => setFormData({ ...formData, pan: e.target.value.toUpperCase() })}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all"
+                      onChange={(e) => {
+                        setFormData({ ...formData, pan: e.target.value.toUpperCase() });
+                        if (formErrors.pan) setFormErrors({ ...formErrors, pan: '' });
+                      }}
+                      className={`w-full px-4 py-3 bg-slate-50 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all ${formErrors.pan ? fieldErrorClass : 'border-slate-200'}`}
                     />
+                    <FieldError message={formErrors.pan} />
                   </div>
                   {userData?.role === 'CHA' && (
                     <div className="space-y-2">

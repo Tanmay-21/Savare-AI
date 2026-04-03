@@ -9,6 +9,7 @@ export interface AppUser {
   role: 'CHA' | 'Transporter' | 'admin';
   companyName: string;
   phoneNumber: string | null;
+  website?: string | null;
   gstin: string;
   pan: string;
   address: string;

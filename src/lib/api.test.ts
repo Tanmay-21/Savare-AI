@@ -95,14 +95,9 @@ describe('apiFetch', () => {
 
     await apiFetch('/api/public');
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      '/api/public',
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer undefined',
-        }),
-      })
-    );
+    const callArgs = vi.mocked(global.fetch).mock.calls[0][1] as RequestInit & { headers: Record<string, string> };
+    expect(callArgs.headers).not.toHaveProperty('Authorization');
+    expect(callArgs.headers['Content-Type']).toBe('application/json');
   });
 
   it('converts snake_case response keys to camelCase', async () => {

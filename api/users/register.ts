@@ -24,18 +24,10 @@ export default async function handler(req: Request, res: Response) {
   }
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    console.log(`[REGISTER] Token received: ${token ? '(present)' : '(missing or empty)'}`);
-    
-    if (!token || token === 'undefined') {
-      console.error('[REGISTER] Missing or undefined auth token');
-      throw new ApiError(401, 'Unauthorized');
-    }
+    if (!token || token === 'undefined') throw new ApiError(401, 'Unauthorized');
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      console.error(`[REGISTER] Supabase auth.getUser failed:`, authError?.message || 'No user returned');
-      throw new ApiError(401, 'Unauthorized');
-    }
+    if (authError || !user) throw new ApiError(401, 'Unauthorized');
 
     const body = parseBody(RegisterSchema, req.body);
 

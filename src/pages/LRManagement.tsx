@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Shipment, Order, LR, Vehicle } from '../types';
 import { apiFetch } from '../lib/api';
+import { useToast } from '../contexts/ToastContext';
+import { parseApiError } from '../lib/parseApiError';
 import {
   FileText,
   Search,
@@ -20,6 +22,8 @@ import { cn } from '../utils/cn';
 import { downloadLR } from '../utils/reportGenerator';
 
 export default function LRManagement() {
+  const { showToast } = useToast();
+  const fetchErrorShown = useRef(false);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -44,6 +48,10 @@ export default function LRManagement() {
       setLrs(lrList);
     } catch (err) {
       console.error('Error fetching LR data:', err);
+      if (!fetchErrorShown.current) {
+        fetchErrorShown.current = true;
+        showToast(parseApiError(err), 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -53,7 +61,7 @@ export default function LRManagement() {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showToast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const generateLR = async (shipmentId: string) => {
     const shipment = shipments.find(s => s.id === shipmentId);
@@ -66,8 +74,11 @@ export default function LRManagement() {
         body: JSON.stringify({ shipmentId, orderId: shipment.orderId }),
       });
       await fetchData();
+      fetchErrorShown.current = false;
+      showToast('LR generated successfully.', 'success');
     } catch (err) {
       console.error('Error generating LR:', err);
+      showToast(parseApiError(err), 'error');
     } finally {
       setGenerating(null);
     }
@@ -87,8 +98,11 @@ export default function LRManagement() {
         });
       }
       await fetchData();
+      showToast('All LRs generated successfully.', 'success');
     } catch (err) {
       console.error('Error generating bulk LRs:', err);
+      await fetchData();
+      showToast(parseApiError(err), 'error');
     } finally {
       setBulkGenerating(false);
     }

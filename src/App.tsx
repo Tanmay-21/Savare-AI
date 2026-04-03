@@ -6,6 +6,8 @@ import {
   Navigate
 } from 'react-router-dom';
 import { useUser } from './hooks/useUser';
+import { ToastProvider } from './contexts/ToastContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
@@ -32,7 +34,9 @@ export default function App() {
   }
 
   return (
+    <ToastProvider>
     <Router>
+      <ErrorBoundary>
       <Routes>
         <Route path="/" element={(user && !user.needsProfile) ? <Navigate to="/app" /> : <Landing />} />
         <Route path="/legal" element={<Legal />} />
@@ -63,6 +67,8 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      </ErrorBoundary>
     </Router>
+    </ToastProvider>
   );
 }

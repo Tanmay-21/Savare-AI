@@ -1,4 +1,6 @@
 import { supabase } from '../supabase';
+import { ApiError } from './apiError';
+export { ApiError } from './apiError';
 
 /** Convert a snake_case string to camelCase */
 function snakeToCamel(str: string): string {
@@ -56,11 +58,11 @@ export async function apiFetch<T = any>(path: string, options?: RequestInit & { 
     body,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${session?.access_token}`,
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
       ...options?.headers,
     },
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new ApiError(res.status, await res.text());
   const json = await res.json();
   return (options?.skipCaseTransform ? json : keysToCamel(json)) as T;
 }

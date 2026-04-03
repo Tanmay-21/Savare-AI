@@ -34,37 +34,13 @@ export async function requireAuth(req: Request): Promise<AuthUser> {
     .eq('auth_id', user.id)
     .single();
 
-  // If no rows returned (PGRST116), auto-create a placeholder profile
-  if (profileError?.code === 'PGRST116' || !profile) {
-    console.log(`[Auth] Auto-creating missing profile for auth_id: ${user.id}`);
-    
-    const { data: newProfile, error: insertError } = await supabase
-      .from('users')
-      .insert({
-        auth_id: user.id,
-        email: user.email ?? '',
-        role: 'Transporter',
-        company_name: 'Pending Setup',
-        gstin: '22AAAAA0000A1Z5', // Must match valid format constraints
-        pan: 'ABCDE1234F',
-        address: 'Please update your address',
-        is_verified: false,
-        is_demo: false,
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error('[Auth] Failed to auto-create profile:', insertError);
-      throw new ApiError(500, 'INTERNAL_PROFILE_CREATE_ERROR');
-    }
-    return newProfile as AuthUser;
-  }
+  // PGRST116 = PostgREST "no rows returned" — user has auth account but no profile row
+  if (profileError?.code === 'PGRST116' || !profile) throw new ApiError(404, 'PROFILE_NOT_FOUND');
 
   if (profileError) {
-    console.error(`[Auth] Profile fetch error:`, profileError);
+    console.error('[Auth] Profile fetch error:', profileError);
     throw new ApiError(500, 'DATABASE_ERROR');
   }
-  
+
   return profile as AuthUser;
 }

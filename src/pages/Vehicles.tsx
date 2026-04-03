@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Vehicle, Driver } from '../types';
 import { apiFetch } from '../lib/api';
 import { cn } from '../utils/cn';
+import { useToast } from '../contexts/ToastContext';
+import { parseApiError } from '../lib/parseApiError';
 import { 
   Truck, 
   Plus, 
@@ -23,6 +25,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Vehicles() {
+  const { showToast } = useToast();
+  const fetchErrorShown = useRef(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -54,6 +58,10 @@ export default function Vehicles() {
       setDrivers(driverList);
     } catch (error) {
       console.error('Error fetching vehicles/drivers:', error);
+      if (!fetchErrorShown.current) {
+        fetchErrorShown.current = true;
+        showToast(parseApiError(error), 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -63,7 +71,7 @@ export default function Vehicles() {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showToast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,9 +112,12 @@ export default function Vehicles() {
       }
 
       await fetchData();
+      fetchErrorShown.current = false;
       closeModal();
+      showToast(editingVehicle ? 'Vehicle updated.' : 'Vehicle added.', 'success');
     } catch (err) {
       console.error('Error saving vehicle:', err);
+      showToast(parseApiError(err), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -119,8 +130,10 @@ export default function Vehicles() {
       await apiFetch(`/api/vehicles/${deleteId}`, { method: 'DELETE' });
       setDeleteId(null);
       await fetchData();
+      showToast('Vehicle deleted.', 'success');
     } catch (err) {
       console.error('Error deleting vehicle:', err);
+      showToast(parseApiError(err), 'error');
     } finally {
       setSubmitting(false);
     }
