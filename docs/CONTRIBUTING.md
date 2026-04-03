@@ -95,10 +95,13 @@ Target: **80% coverage** on all new code. Write tests before implementation (TDD
 
 - [ ] `npm run lint` passes with no type errors
 - [ ] `npm run build` succeeds
-- [ ] `npm test` passes
+- [ ] `npm test` passes (target: 80% coverage)
 - [ ] New API routes call `requireAuth(req)` and use `parseBody(Schema, req.body)`
 - [ ] New API PATCH/GET handlers distinguish 404 (`PGRST116`) from 500 errors
+- [ ] All data-modifying queries filter by `user_id` (ownership check)
+- [ ] Non-fatal operations return composite responses (e.g., `{ data, operationFailed }`) and client handles warnings
 - [ ] No hardcoded strings that belong in `src/constants/branding.ts`
 - [ ] No direct Supabase calls from browser code (all data access goes through `/api/*`)
 - [ ] New `apiFetch` call sites specify a type parameter (`apiFetch<MyType>(...)`) when the response shape is known
 - [ ] No `any` types introduced in new code without a comment explaining why
+- [ ] Related documentation updated: CLAUDE.md, docs/CODEMAPS/ROUTES.md, or docs/RUNBOOK.md

@@ -40,24 +40,24 @@ Environment: copy `.env.local.example` to `.env.local` and fill in Supabase cred
 
 ### API routes (`api/`)
 
-| Route | Methods | Purpose |
-|---|---|---|
-| `api/users/me.ts` | GET, PATCH | Current user profile |
-| `api/users/register.ts` | POST | Create user profile after auth signup |
-| `api/auth/demo.ts` | POST | Create demo user + return JWT |
-| `api/orders/index.ts` | GET, POST | List / create orders |
-| `api/orders/[id].ts` | GET, PATCH, DELETE | Single order |
-| `api/shipments/index.ts` | GET, POST | List / create shipments |
-| `api/shipments/[id].ts` | GET, PATCH, DELETE | Single shipment |
-| `api/vehicles/index.ts` | GET, POST | List / create vehicles |
-| `api/vehicles/[id].ts` | GET, PATCH, DELETE | Single vehicle |
-| `api/drivers/index.ts` | GET, POST | List / create drivers |
-| `api/drivers/[id].ts` | GET, PATCH, DELETE | Single driver |
-| `api/expenses/index.ts` | GET, POST | List / create expenses |
-| `api/expenses/[id].ts` | GET, PATCH, DELETE | Single expense |
-| `api/lrs/index.ts` | GET | List LRs |
-| `api/lrs/generate.ts` | POST | Generate LR (atomic sequence) |
-| `api/counters/next.ts` | POST | Get next counter value |
+| Route | Methods | Purpose | Response Notes |
+|---|---|---|---|
+| `api/users/me.ts` | GET, PATCH | Current user profile | — |
+| `api/users/register.ts` | POST | Create user profile after auth signup | — |
+| `api/auth/demo.ts` | POST | Create demo user + return JWT | — |
+| `api/orders/index.ts` | GET, POST | List / create orders | — |
+| `api/orders/[id].ts` | GET, PATCH, DELETE | Single order | — |
+| `api/shipments/index.ts` | GET, POST | List / create shipments | — |
+| `api/shipments/[id].ts` | GET, PATCH, DELETE | Single shipment | PATCH: `{ data, vehicleUpdateFailed }` (vehicle update is non-fatal) |
+| `api/vehicles/index.ts` | GET, POST | List / create vehicles | — |
+| `api/vehicles/[id].ts` | GET, PATCH, DELETE | Single vehicle | — |
+| `api/drivers/index.ts` | GET, POST | List / create drivers | — |
+| `api/drivers/[id].ts` | GET, PATCH, DELETE | Single driver | — |
+| `api/expenses/index.ts` | GET, POST | List / create expenses (batch or single) | POST (batch): `{ data, lockFailed }` (lock is non-fatal) |
+| `api/expenses/[id].ts` | GET, PATCH, DELETE | Single expense | — |
+| `api/lrs/index.ts` | GET | List LRs | — |
+| `api/lrs/generate.ts` | POST | Generate LR (requires shipment.status === 'delivered') | 400 if not delivered |
+| `api/counters/next.ts` | POST | Get next counter value | — |
 
 ### Supabase tables
 

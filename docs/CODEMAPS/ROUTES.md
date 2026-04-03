@@ -33,15 +33,15 @@ Every route (except `/api/auth/demo`) requires a `Authorization: Bearer <jwt>` h
 | `/api/orders` | GET, POST | `api/orders/index.ts` | List (owner-scoped) / create order |
 | `/api/orders/:id` | GET, PATCH, DELETE | `api/orders/[id].ts` | Single order — 404 if not owned by caller |
 | `/api/shipments` | GET, POST | `api/shipments/index.ts` | List / create shipment |
-| `/api/shipments/:id` | GET, PATCH, DELETE | `api/shipments/[id].ts` | Single shipment |
+| `/api/shipments/:id` | GET, PATCH, DELETE | `api/shipments/[id].ts` | Single shipment; PATCH response: `{ data, vehicleUpdateFailed }` |
 | `/api/vehicles` | GET, POST | `api/vehicles/index.ts` | List / create vehicle |
 | `/api/vehicles/:id` | GET, PATCH, DELETE | `api/vehicles/[id].ts` | Single vehicle |
 | `/api/drivers` | GET, POST | `api/drivers/index.ts` | List / create driver |
 | `/api/drivers/:id` | GET, PATCH, DELETE | `api/drivers/[id].ts` | Single driver |
-| `/api/expenses` | GET, POST | `api/expenses/index.ts` | List / create expense |
+| `/api/expenses` | GET, POST | `api/expenses/index.ts` | List / create (single or batch); POST batch: `{ expenses: [...], lock_shipment_id? }` → `{ data, lockFailed }` |
 | `/api/expenses/:id` | GET, PATCH, DELETE | `api/expenses/[id].ts` | Single expense |
 | `/api/lrs` | GET | `api/lrs/index.ts` | List LRs |
-| `/api/lrs/generate` | POST | `api/lrs/generate.ts` | Generate LR with atomic sequence |
+| `/api/lrs/generate` | POST | `api/lrs/generate.ts` | Generate LR (requires `shipment.status === 'delivered'`); 400 if not delivered |
 | `/api/counters/next` | POST | `api/counters/next.ts` | Get next counter value |
 
 ## Role-Based Navigation Restrictions
@@ -81,3 +81,62 @@ The signup form includes GSTIN and PAN fields (validated server-side with regex 
 - Highlights the active route by comparing `location.pathname` to each nav item's `path`
 - Shows the company name from `user.companyName` (passed as prop from `App.tsx`)
 - "Logout" button calls `supabase.auth.signOut()` which triggers `onAuthStateChange → null` → route guard redirects to `/login`
+
+## Recent API Changes (Updated 2026-04-04)
+
+### PATCH /api/shipments/:id — Vehicle Update Atomicity
+
+**Change:** PATCH response now returns `{ data, vehicleUpdateFailed }` instead of just `data`.
+
+**Rationale:** Shipment updates and vehicle availability changes are now decoupled. The shipment is updated first (critical); vehicle state updates happen after as a best-effort operation. If vehicle updates fail, the shipment is already persisted correctly.
+
+**Frontend handling** (`src/pages/Shipments.tsx` lines 149–151):
+```typescript
+if (result?.vehicleUpdateFailed) {
+  showToast('Vehicle availability could not be refreshed — please check vehicle status.', 'error');
+}
+```
+
+### POST /api/shipments/:id with `previous_vehicle_id`
+
+**Change:** PATCH body now accepts optional `previous_vehicle_id` to handle vehicle swaps atomically on the server.
+
+**Rationale:** When a user changes a vehicle mid-trip, the backend releases the old vehicle (`is_available: true`) and marks the new one as unavailable (`is_available: false`) in a single request.
+
+### POST /api/lrs/generate — Shipment Status Guard
+
+**Change:** LR generation now requires `shipment.status === 'delivered'`. Returns 400 if the shipment is in any other state.
+
+**Error response (400):**
+```json
+{
+  "error": "LR can only be generated for delivered shipments. Current status: in-transit"
+}
+```
+
+**Frontend impact** (`src/pages/LRManagement.tsx` line 119):
+- Pending tab now filters to `!s.lrNumber && s.status === 'delivered'`
+- Only delivered shipments without LRs are shown as eligible for generation
+
+### POST /api/expenses (Batch Mode)
+
+**Change:** Expenses endpoint now supports batch insertion with optional shipment locking.
+
+**Batch request body:**
+```json
+{
+  "expenses": [
+    { "tripId": "...", "category": "Fuel", "amount": 500, ... },
+    { "tripId": "...", "category": "Toll", "amount": 100, ... }
+  ],
+  "lock_shipment_id": "..." // optional
+}
+```
+
+**Batch response:** `{ data: [...], lockFailed: boolean }`
+
+**Rationale:** When marking a shipment as delivered, the frontend sends multiple expenses + an optional request to lock the shipment atomically. If the lock fails (non-fatal), expenses are still persisted and the user is warned.
+
+**Frontend impact** (`src/pages/Shipments.tsx` lines 167–200):
+- When user marks a shipment "delivered" and enters expenses, a batch POST is sent with `lock_shipment_id`
+- Handles `lockFailed` flag with a toast warning

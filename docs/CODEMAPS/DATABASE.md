@@ -85,7 +85,7 @@ One shipment = one container leg. Orders have one shipment per container.
 | `driver_name` | text? | Denormalized from driver |
 | `lr_number` | text? | Assigned after LR generation |
 | `seal_number` | text? | |
-| `is_locked` | boolean? | Locked after LR is issued |
+| `is_locked` | boolean? | Set to `true` when expenses are submitted (via batch POST with `lock_shipment_id`); prevents further edits to the trip |
 | `is_lolo` | boolean? | |
 | `yard_selection` | text? | |
 | `movement_type` | text? | `'Import' \| 'Export' \| 'Rail'` |
@@ -109,7 +109,7 @@ One shipment = one container leg. Orders have one shipment per container.
 | `plate_number` | text | |
 | `vehicle_type` | text | |
 | `status` | text | `'active' \| 'maintenance' \| 'inactive'` |
-| `is_available` | boolean? | |
+| `is_available` | boolean? | Managed by API: set to `false` when shipment status = `'in-transit'`; set to `true` when shipment status = `'delivered'` or when released via `previousVehicleId` |
 | `current_driver_id` | uuid? | |
 | `insurance_expiry` | date? | |
 | `permit_expiry` | date? | |
