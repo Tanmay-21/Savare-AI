@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { Vehicle, Driver } from '../types';
 import { apiFetch } from '../lib/api';
 import { cn } from '../utils/cn';
@@ -23,16 +23,14 @@ import {
   Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useData } from '../contexts/DataContext';
 
 export default function Vehicles() {
   const { showToast } = useToast();
-  const fetchErrorShown = useRef(false);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const { vehicles, drivers, loading, refetch: fetchData } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -47,31 +45,6 @@ export default function Vehicles() {
     pucExpiry: '',
     currentDriverId: ''
   });
-
-  const fetchData = async () => {
-    try {
-      const [vehicleList, driverList] = await Promise.all([
-        apiFetch('/api/vehicles'),
-        apiFetch('/api/drivers'),
-      ]);
-      setVehicles(vehicleList);
-      setDrivers(driverList);
-    } catch (error) {
-      console.error('Error fetching vehicles/drivers:', error);
-      if (!fetchErrorShown.current) {
-        fetchErrorShown.current = true;
-        showToast(parseApiError(error), 'error');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [showToast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,11 +85,9 @@ export default function Vehicles() {
       }
 
       await fetchData();
-      fetchErrorShown.current = false;
       closeModal();
       showToast(editingVehicle ? 'Vehicle updated.' : 'Vehicle added.', 'success');
     } catch (err) {
-      console.error('Error saving vehicle:', err);
       showToast(parseApiError(err), 'error');
     } finally {
       setSubmitting(false);
@@ -132,7 +103,6 @@ export default function Vehicles() {
       await fetchData();
       showToast('Vehicle deleted.', 'success');
     } catch (err) {
-      console.error('Error deleting vehicle:', err);
       showToast(parseApiError(err), 'error');
     } finally {
       setSubmitting(false);

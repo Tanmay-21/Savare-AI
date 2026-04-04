@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { apiFetch } from '../lib/api';
 
@@ -23,36 +23,85 @@ export interface AppUser {
   needsProfile?: boolean;
 }
 
+// Module-level cache so multiple useUser() callers share one subscription
+let cachedUser: AppUser | null = null;
+let listeners: Array<(u: AppUser | null) => void> = [];
+let initialized = false;
+let initializing = false;
+// Store the Supabase subscription so we can unsubscribe if needed
+let authSubscription: { unsubscribe: () => void } | null = null;
+
+function notifyListeners(u: AppUser | null) {
+  cachedUser = u;
+  listeners.forEach((fn) => fn(u));
+}
+
+async function fetchProfile(sessionUser: { id: string; email?: string }): Promise<void> {
+  try {
+    const profile = await apiFetch<AppUser>('/api/users/me');
+    notifyListeners({ ...sessionUser, ...profile } as AppUser);
+  } catch {
+    notifyListeners({ ...sessionUser, needsProfile: true } as unknown as AppUser);
+  }
+}
+
+function initSingleton() {
+  if (initialized || initializing) return;
+  initializing = true;
+
+  // Initial session check
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    initialized = true;
+    initializing = false;
+    if (session) {
+      fetchProfile(session.user);
+    } else {
+      notifyListeners(null);
+    }
+  });
+
+  // Auth state change listener — skip INITIAL_SESSION (handled by getSession above)
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION') return;
+    if (session) {
+      fetchProfile(session.user);
+    } else {
+      // On sign-out, reset singleton so next mount reinitialises cleanly
+      initialized = false;
+      initializing = false;
+      authSubscription = null;
+      subscription.unsubscribe();
+      notifyListeners(null);
+    }
+  });
+  authSubscription = subscription;
+}
+
 export function useUser() {
-  const [user, setUser] = useState<AppUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<AppUser | null>(cachedUser);
+  const [loading, setLoading] = useState(!initialized);
+  const setUserRef = useRef(setUser);
+  setUserRef.current = setUser;
 
   useEffect(() => {
-    // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        apiFetch<AppUser>('/api/users/me')
-          .then((profile) => setUser({ ...session.user, ...profile } as AppUser))
-          .catch(() => setUser({ ...session.user, needsProfile: true } as unknown as AppUser))
-          .finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
+    // Register listener
+    const handler = (u: AppUser | null) => {
+      setUserRef.current(u);
+      setLoading(false);
+    };
+    listeners.push(handler);
 
-    // Auth state change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        apiFetch<AppUser>('/api/users/me')
-          .then((profile) => setUser({ ...session.user, ...profile } as AppUser))
-          .catch(() => setUser({ ...session.user, needsProfile: true } as unknown as AppUser));
-      } else {
-        setUser(null);
-        setLoading(false);
-      }
-    });
+    // If already initialized, sync current value immediately
+    if (initialized) {
+      setUser(cachedUser);
+      setLoading(false);
+    } else {
+      initSingleton();
+    }
 
-    return () => subscription.unsubscribe();
+    return () => {
+      listeners = listeners.filter((fn) => fn !== handler);
+    };
   }, []);
 
   return { user, loading };

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Shipment, Order, LR, Vehicle } from '../types';
 import { apiFetch } from '../lib/api';
 import { useToast } from '../contexts/ToastContext';
 import { parseApiError } from '../lib/parseApiError';
+import { useData } from '../contexts/DataContext';
 import {
   FileText,
   Search,
@@ -23,44 +24,17 @@ import { downloadLR } from '../utils/reportGenerator';
 
 export default function LRManagement() {
   const { showToast } = useToast();
-  const fetchErrorShown = useRef(false);
-  const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [lrs, setLrs] = useState<LR[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { shipments, orders, vehicles, lrs, loading, refetch: fetchData } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'pending' | 'generated'>('pending');
   const [generating, setGenerating] = useState<string | null>(null);
   const [bulkGenerating, setBulkGenerating] = useState(false);
 
-  const fetchData = async () => {
-    try {
-      const [shipmentList, orderList, vehicleList, lrList] = await Promise.all([
-        apiFetch('/api/shipments'),
-        apiFetch('/api/orders'),
-        apiFetch('/api/vehicles'),
-        apiFetch('/api/lrs'),
-      ]);
-      setShipments(shipmentList);
-      setOrders(orderList);
-      setVehicles(vehicleList);
-      setLrs(lrList);
-    } catch (err) {
-      if (!fetchErrorShown.current) {
-        fetchErrorShown.current = true;
-        showToast(parseApiError(err), 'error');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [showToast]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Pre-index LRs by lrNumber to avoid O(N) scan per row
+  const lrsByNumber = useMemo(
+    () => new Map(lrs.map(lr => [lr.lrNumber, lr])),
+    [lrs]
+  );
 
   const generateLR = async (shipmentId: string) => {
     const shipment = shipments.find(s => s.id === shipmentId);
@@ -73,7 +47,6 @@ export default function LRManagement() {
         body: JSON.stringify({ shipmentId, orderId: shipment.orderId }),
       });
       await fetchData();
-      fetchErrorShown.current = false;
       showToast('LR generated successfully.', 'success');
     } catch (err) {
       showToast(parseApiError(err), 'error');
@@ -269,8 +242,9 @@ export default function LRManagement() {
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-primary">{shipment.lrNumber}</span>
                           <span className="text-[10px] text-slate-400 font-medium">
-                            {lrs.find(l => l.lrNumber === shipment.lrNumber)?.createdAt ? 
-                              new Date(lrs.find(l => l.lrNumber === shipment.lrNumber)!.createdAt).toLocaleDateString() : ''}
+                            {lrsByNumber.get(shipment.lrNumber!)?.createdAt
+                              ? new Date(lrsByNumber.get(shipment.lrNumber!)!.createdAt).toLocaleDateString()
+                              : ''}
                           </span>
                         </div>
                       )}

@@ -1,8 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { apiFetch } from '../lib/api';
-import { useToast } from '../contexts/ToastContext';
-import { parseApiError } from '../lib/parseApiError';
-import { Truck, Users, Package, TrendingUp, Clock, MapPin, AlertCircle, CheckCircle2, IndianRupee, Settings, Activity, Plus, HelpCircle, ArrowRight, X, Loader2, FileText, HardHat } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Truck, Users, Package, TrendingUp, AlertCircle, Activity, Plus, X, FileText, HardHat, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -10,76 +7,41 @@ import { Shipment, Order } from '../types';
 import { cn } from '../utils/cn';
 import { APP_NAME, SUPPORT_EMAIL, SUPPORT_PHONE } from '../constants/branding';
 import ComingSoonModal from '../components/ComingSoonModal';
-
+import { useData } from '../contexts/DataContext';
 import { useUser } from '../hooks/useUser';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useUser();
-  const { showToast } = useToast();
-  const fetchErrorShown = useRef(false);
-  const [stats, setStats] = useState({
-    vehicles: 0,
-    drivers: 0,
-    totalTrips: 0,
-    activeTrips: 0,
-    completedTrips: 0,
-    tripsThisMonth: 0,
-    activeOrders: 0,
-    vehiclesMaintenance: 0,
-  });
-  const [recentTrips, setRecentTrips] = useState<Shipment[]>([]);
+  const { shipments: trips, vehicles, drivers, orders } = useData();
   const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchDashboard = async () => {
-      try {
-        const [vehicles, drivers, trips, orders] = await Promise.all([
-          apiFetch('/api/vehicles'),
-          apiFetch('/api/drivers'),
-          apiFetch('/api/shipments'),
-          apiFetch('/api/orders'),
-        ]);
-
-        const now = new Date();
-        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-        setRecentTrips(trips);
-        setStats({
-          vehicles: vehicles.length,
-          drivers: drivers.length,
-          totalTrips: trips.length,
-          activeTrips: trips.filter((t: Shipment) => t.status === 'in-transit').length,
-          completedTrips: trips.filter((t: Shipment) => t.status === 'delivered').length,
-          tripsThisMonth: trips.filter((t: Shipment) => t.createdAt && new Date(t.createdAt) >= firstDayOfMonth).length,
-          activeOrders: orders.filter((o: Order) => o.status !== 'completed').length,
-          vehiclesMaintenance: vehicles.filter((v: { status: string }) => v.status === 'maintenance').length,
-        });
-      } catch (error) {
-        console.error('Error fetching dashboard stats:', error);
-        if (!fetchErrorShown.current) {
-          fetchErrorShown.current = true;
-          showToast(parseApiError(error), 'error');
-        }
-      }
+  const stats = useMemo(() => {
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return {
+      vehicles: vehicles.length,
+      drivers: drivers.length,
+      totalTrips: trips.length,
+      activeTrips: trips.filter((t: Shipment) => t.status === 'in-transit').length,
+      completedTrips: trips.filter((t: Shipment) => t.status === 'delivered').length,
+      tripsThisMonth: trips.filter((t: Shipment) => t.createdAt && new Date(t.createdAt) >= firstDayOfMonth).length,
+      activeOrders: orders.filter((o: Order) => o.status !== 'completed').length,
+      vehiclesMaintenance: vehicles.filter((v: { status: string }) => v.status === 'maintenance').length,
     };
+  }, [trips, vehicles, drivers, orders]);
 
-    fetchDashboard();
-    const interval = setInterval(fetchDashboard, 30000);
-    return () => clearInterval(interval);
-  }, [showToast]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const cards = [
+  const cards = useMemo(() => [
     { name: 'Active Fleet', value: stats.vehicles, icon: Truck, color: 'bg-primary/10 text-primary', trend: '+2 this week' },
     { name: 'Active Orders', value: stats.activeOrders, icon: FileText, color: 'bg-accent/10 text-accent', trend: 'Bulk tracking' },
     { name: 'Ongoing Trips', value: stats.activeTrips, icon: TrendingUp, color: 'bg-primary/10 text-primary', trend: 'High volume' },
     { name: 'Trips this Month', value: stats.tripsThisMonth, icon: Package, color: 'bg-accent/10 text-accent', trend: 'Monthly volume' },
-  ];
+  ], [stats]);
 
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   // Derive weekly trip volume from real data
-  const chartData = React.useMemo(() => {
+  const chartData = useMemo(() => {
     const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const now = new Date();
     const dayOfWeek = now.getDay(); // 0=Sun
@@ -93,14 +55,14 @@ export default function Dashboard() {
       dayStart.setDate(monday.getDate() + i);
       const dayEnd = new Date(dayStart);
       dayEnd.setDate(dayStart.getDate() + 1);
-      const count = recentTrips.filter((t: Shipment) => {
+      const count = trips.filter((t: Shipment) => {
         if (!t.createdAt) return false;
         const d = new Date(t.createdAt);
         return d >= dayStart && d < dayEnd;
       }).length;
       return { day, trips: count };
     });
-  }, [recentTrips]);
+  }, [trips]);
 
   return (
     <div className="space-y-8 pb-12">

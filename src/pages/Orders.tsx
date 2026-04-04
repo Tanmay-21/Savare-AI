@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Order, Shipment, Expense } from '../types';
 import { apiFetch } from '../lib/api';
 import { useToast } from '../contexts/ToastContext';
 import { parseApiError } from '../lib/parseApiError';
+import { useData } from '../contexts/DataContext';
 import { FieldError, fieldErrorClass } from '../components/ui/FieldError';
 import { 
   FileText, 
@@ -28,11 +29,8 @@ import * as XLSX from 'xlsx';
 
 export default function Orders() {
   const { showToast } = useToast();
-  const fetchErrorShown = useRef(false);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
+  const autoCompletedRef = useRef<Set<string>>(new Set());
+  const { orders, shipments, expenses, loading, refetch: fetchData } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,54 +55,34 @@ export default function Orders() {
     remarks: '',
   });
 
-  const fetchData = async () => {
-    try {
-      const [orderList, shipmentList, expenseList] = await Promise.all([
-        apiFetch('/api/orders'),
-        apiFetch('/api/shipments'),
-        apiFetch('/api/expenses'),
-      ]);
-      setOrders(orderList);
-      setShipments(shipmentList);
-      setExpenses(expenseList);
-    } catch (error) {
-      console.error('Error fetching orders data:', error);
-      if (!fetchErrorShown.current) {
-        fetchErrorShown.current = true;
-        showToast(parseApiError(error), 'error');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [showToast]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    // Auto-complete orders where all shipments are delivered
-    const pendingUpdates = orders.filter(order => {
+    // Auto-complete orders where all shipments are delivered.
+    // Track which orders have already been sent for auto-completion this session
+    // to avoid firing PATCH on every poll cycle.
+    const newlyComplete = orders.filter(order => {
       if (order.status === 'completed') return false;
+      if (autoCompletedRef.current.has(order.id)) return false;
       const orderShipments = shipments.filter(s => s.orderId === order.id);
       if (orderShipments.length === 0) return false;
       return orderShipments.every(s => s.status === 'delivered');
     });
 
+    if (newlyComplete.length === 0) return;
+
+    newlyComplete.forEach(o => autoCompletedRef.current.add(o.id));
+
     Promise.all(
-      pendingUpdates.map((order) =>
+      newlyComplete.map((order) =>
         apiFetch(`/api/orders/${order.id}`, {
           method: 'PATCH',
           body: JSON.stringify({ status: 'completed' }),
-        }).catch((error) => {
-          console.error('Error auto-completing order:', error);
+        }).then(() => fetchData()).catch((error) => {
+          autoCompletedRef.current.delete(order.id);
           showToast(parseApiError(error), 'error');
         })
       )
     );
-  }, [orders, shipments, showToast]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [orders, shipments]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -144,27 +122,28 @@ export default function Orders() {
         }),
       });
 
-      // Create shipments for each container
-      for (let i = 0; i < formData.containerCount; i++) {
-        await apiFetch('/api/shipments', {
-          method: 'POST',
-          body: JSON.stringify({
-            orderId: order.id,
-            containerSize: formData.containerSize,
-            origin: formData.origin,
-            destination: formData.destination,
-            billingPartyName: formData.billingPartyName,
-            consigneeName: order.consigneeName,
-            movementType: formData.movementType,
-            isLolo: formData.isLolo,
-            yardSelection: formData.yardSelection,
-            remarks: formData.remarks,
-          }),
-        });
-      }
+      // Create all shipments in parallel
+      await Promise.all(
+        Array.from({ length: formData.containerCount }, () =>
+          apiFetch('/api/shipments', {
+            method: 'POST',
+            body: JSON.stringify({
+              orderId: order.id,
+              containerSize: formData.containerSize,
+              origin: formData.origin,
+              destination: formData.destination,
+              billingPartyName: formData.billingPartyName,
+              consigneeName: order.consigneeName,
+              movementType: formData.movementType,
+              isLolo: formData.isLolo,
+              yardSelection: formData.yardSelection,
+              remarks: formData.remarks,
+            }),
+          })
+        )
+      );
 
       await fetchData();
-      fetchErrorShown.current = false;
       setIsModalOpen(false);
       setFormErrors({});
       setFormData({
