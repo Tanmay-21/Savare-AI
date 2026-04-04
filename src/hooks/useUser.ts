@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { apiFetch } from '../lib/api';
+import { apiFetch, ApiError } from '../lib/api';
 
 export interface AppUser {
   id: string;
@@ -40,8 +40,11 @@ async function fetchProfile(sessionUser: { id: string; email?: string }): Promis
   try {
     const profile = await apiFetch<AppUser>('/api/users/me');
     notifyListeners({ ...sessionUser, ...profile } as AppUser);
-  } catch {
-    notifyListeners({ ...sessionUser, needsProfile: true } as unknown as AppUser);
+  } catch (err) {
+    // Only block app access when the profile genuinely doesn't exist (404).
+    // Network errors, 5xx, etc. should not strand the user on the login page.
+    const isProfileMissing = err instanceof ApiError && err.status === 404;
+    notifyListeners({ ...sessionUser, needsProfile: isProfileMissing } as unknown as AppUser);
   }
 }
 
@@ -75,6 +78,13 @@ function initSingleton() {
     }
   });
   authSubscription = subscription;
+}
+
+/** Re-fetches the profile from the API and updates all listeners.
+ *  Call this after registration completes to clear the needsProfile flag. */
+export async function refreshProfile(): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) await fetchProfile(session.user);
 }
 
 export function useUser() {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase';
 import { apiFetch } from '../lib/api';
+import { refreshProfile } from '../hooks/useUser';
 import {
   Truck,
   LogIn,
@@ -115,9 +116,13 @@ export default function Login() {
               : { fleet_size: signupData.fleetSize }),
           }),
         });
+
+        // Profile now exists — re-fetch to clear the needsProfile flag that was set
+        // by the onAuthStateChange(SIGNED_IN) event that fired before register completed.
+        await refreshProfile();
       }
     } catch (err: any) {
-      console.error('Auth error:', err);
+      if (import.meta.env.DEV) console.error('Auth error:', err);
       if (err.message?.includes('Invalid login credentials')) {
         setError('Invalid email or password.');
       } else if (err.message?.includes('Password should be')) {

@@ -29,7 +29,7 @@ export default function LRManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'pending' | 'generated'>('pending');
   const [generating, setGenerating] = useState<string | null>(null);
-  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkGeneratingOrders, setBulkGeneratingOrders] = useState<Set<string>>(new Set());
   const [generatedOrderFilter, setGeneratedOrderFilter] = useState<string>('all');
   const [bulkDownloading, setBulkDownloading] = useState(false);
 
@@ -64,7 +64,7 @@ export default function LRManagement() {
     );
     if (orderShipments.length === 0) return;
 
-    setBulkGenerating(true);
+    setBulkGeneratingOrders(prev => new Set(prev).add(orderId));
     try {
       // Generate LRs sequentially to maintain atomic sequence ordering
       for (const shipment of orderShipments) {
@@ -79,7 +79,7 @@ export default function LRManagement() {
       await fetchData();
       showToast(parseApiError(err), 'error');
     } finally {
-      setBulkGenerating(false);
+      setBulkGeneratingOrders(prev => { const next = new Set(prev); next.delete(orderId); return next; });
     }
   };
 
@@ -166,11 +166,11 @@ export default function LRManagement() {
                     <span>{order.destination}</span>
                   </div>
                   <button
-                    onClick={() => generateBulkLRs(order.id!)}
-                    disabled={bulkGenerating}
+                    onClick={() => { if (order.id) generateBulkLRs(order.id); }}
+                    disabled={!order.id || bulkGeneratingOrders.has(order.id)}
                     className="w-full py-3 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    {bulkGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                    {order.id && bulkGeneratingOrders.has(order.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
                     Generate {pendingCount} LRs
                   </button>
                 </div>

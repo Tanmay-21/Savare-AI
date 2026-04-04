@@ -61,10 +61,6 @@ app.use((req, res, next) => {
   }
 
   if (req.method === 'OPTIONS') {
-    // Force allow the origin on preflights so the browser lets the request through to see real logs
-    if (origin && !res.getHeader('Access-Control-Allow-Origin')) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-    }
     return res.status(204).end();
   }
   next();

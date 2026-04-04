@@ -21,9 +21,7 @@ export async function downloadLRsAsZip(
 ): Promise<{ success: number; failed: number }> {
   if (shipments.length === 0) return { success: 0, failed: 0 };
 
-  // JSZip supports being called without `new` (internally returns `new JSZip()` if needed).
-  // Using function-call form keeps tests compatible with vi.fn() arrow-function mocks.
-  const zip = (JSZip as unknown as () => InstanceType<typeof JSZip>)();
+  const zip = new JSZip();
   let success = 0;
   let failed = 0;
 

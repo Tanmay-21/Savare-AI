@@ -5,14 +5,14 @@ import type { Shipment, Order, Vehicle } from '../types';
 vi.mock('jspdf', () => {
   const save = vi.fn();
   const output = vi.fn(() => new ArrayBuffer(8));
-  const MockJsPDF = vi.fn(() => ({
-    setFontSize: vi.fn(),
-    setFont: vi.fn(),
-    text: vi.fn(),
-    save,
-    output,
-    internal: { pageSize: { getWidth: () => 210 } },
-  }));
+  const MockJsPDF = vi.fn(function (this: any) {
+    this.setFontSize = vi.fn();
+    this.setFont = vi.fn();
+    this.text = vi.fn();
+    this.save = save;
+    this.output = output;
+    this.internal = { pageSize: { getWidth: () => 210 } };
+  });
   return { default: MockJsPDF };
 });
 vi.mock('jspdf-autotable', () => ({}));
@@ -21,7 +21,10 @@ vi.mock('jspdf-autotable', () => ({}));
 const mockFile = vi.fn();
 const mockGenerateAsync = vi.fn().mockResolvedValue(new Blob(['zip']));
 vi.mock('jszip', () => ({
-  default: vi.fn(() => ({ file: mockFile, generateAsync: mockGenerateAsync })),
+  default: vi.fn(function (this: any) {
+    this.file = mockFile;
+    this.generateAsync = mockGenerateAsync;
+  }),
 }));
 
 // Mock saveAs helper (the module-private one is reimplemented in lrBulkDownload)
@@ -138,14 +141,15 @@ describe('downloadLRsAsZip', () => {
   it('skips failed PDFs and counts them in failed', async () => {
     const jsPDF = (await import('jspdf')).default as unknown as ReturnType<typeof vi.fn>;
     let callCount = 0;
-    jsPDF.mockImplementation(() => {
+    jsPDF.mockImplementation(function (this: any) {
       callCount++;
       if (callCount === 2) throw new Error('PDF build error');
-      return {
-        setFontSize: vi.fn(), setFont: vi.fn(), text: vi.fn(), save: vi.fn(),
-        output: vi.fn(() => new ArrayBuffer(8)),
-        internal: { pageSize: { getWidth: () => 210 } },
-      };
+      this.setFontSize = vi.fn();
+      this.setFont = vi.fn();
+      this.text = vi.fn();
+      this.save = vi.fn();
+      this.output = vi.fn(() => new ArrayBuffer(8));
+      this.internal = { pageSize: { getWidth: () => 210 } };
     });
 
     const { downloadLRsAsZip } = await import('./lrBulkDownload');

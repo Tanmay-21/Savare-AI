@@ -332,9 +332,7 @@ export const downloadPayoutReport = async (expenses: Expense[], drivers: Driver[
 
 /** Builds a jsPDF LR document in memory and returns it. Does NOT save or download. */
 export const buildLRDocument = (shipment: Shipment, order?: Order, vehicle?: Vehicle): jsPDF => {
-  // jsPDF supports being called as a function (returns new instance if not called with new).
-  // Function-call form keeps vi.fn() arrow-function mocks in tests working correctly.
-  const doc = (jsPDF as unknown as () => jsPDF)();
+  const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 20;
 
