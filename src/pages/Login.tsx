@@ -82,10 +82,25 @@ export default function Login() {
         }
 
         const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        if (!data.user) throw new Error('Sign-up failed. Please try again.');
 
-        // Create user profile via API
+        if (error) {
+          // If the auth user already exists (e.g. profile creation failed on a previous attempt),
+          // sign in with the provided credentials and re-run the profile upsert.
+          if (error.message?.includes('User already registered')) {
+            const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+            if (signInError) {
+              // Wrong password for the existing account
+              throw new Error('This email is already registered. Please log in with your existing credentials.');
+            }
+            // Signed in — profile upsert continues below
+          } else {
+            throw error;
+          }
+        } else if (!data.user) {
+          throw new Error('Sign-up failed. Please try again.');
+        }
+
+        // Create (or recover) user profile via API — handler uses upsert, safe to call again
         await apiFetch('/api/users/register', {
           method: 'POST',
           body: JSON.stringify({
@@ -105,8 +120,6 @@ export default function Login() {
       console.error('Auth error:', err);
       if (err.message?.includes('Invalid login credentials')) {
         setError('Invalid email or password.');
-      } else if (err.message?.includes('User already registered')) {
-        setError('Email already in use. Try logging in.');
       } else if (err.message?.includes('Password should be')) {
         setError('Password should be at least 6 characters.');
       } else {

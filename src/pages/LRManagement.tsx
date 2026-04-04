@@ -21,6 +21,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../utils/cn';
 import { downloadLR } from '../utils/reportGenerator';
+import { downloadLRsAsZip } from '../utils/lrBulkDownload';
 
 export default function LRManagement() {
   const { showToast } = useToast();
@@ -29,6 +30,8 @@ export default function LRManagement() {
   const [activeTab, setActiveTab] = useState<'pending' | 'generated'>('pending');
   const [generating, setGenerating] = useState<string | null>(null);
   const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [generatedOrderFilter, setGeneratedOrderFilter] = useState<string>('all');
+  const [bulkDownloading, setBulkDownloading] = useState(false);
 
   // Pre-index LRs by lrNumber to avoid O(N) scan per row
   const lrsByNumber = useMemo(
@@ -80,24 +83,52 @@ export default function LRManagement() {
     }
   };
 
-  const filteredShipments = shipments.filter(s => {
-    const matchesSearch = 
-      (s.tripId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-      (s.containerNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-      (s.billingPartyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-      (s.lrNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase());
-    
+  const filteredShipments = useMemo(() => shipments.filter(s => {
+    const term = searchTerm.toLowerCase();
+    const matchesSearch =
+      (s.tripId?.toLowerCase() || '').includes(term) ||
+      (s.containerNumber?.toLowerCase() || '').includes(term) ||
+      (s.billingPartyName?.toLowerCase() || '').includes(term) ||
+      (s.lrNumber?.toLowerCase() || '').includes(term);
+
     const matchesTab =
       activeTab === 'pending'
         ? !s.lrNumber && s.status === 'delivered'
         : !!s.lrNumber;
-    
-    return matchesSearch && matchesTab;
-  });
 
-  const pendingOrders = orders.filter(o =>
-    shipments.some(s => s.orderId === o.id && !s.lrNumber && s.status === 'delivered')
+    const matchesOrderFilter =
+      activeTab !== 'generated' ||
+      generatedOrderFilter === 'all' ||
+      s.orderId === generatedOrderFilter;
+
+    return matchesSearch && matchesTab && matchesOrderFilter;
+  }), [shipments, searchTerm, activeTab, generatedOrderFilter]);
+
+  const pendingOrders = useMemo(
+    () => orders.filter(o => shipments.some(s => s.orderId === o.id && !s.lrNumber && s.status === 'delivered')),
+    [orders, shipments]
   );
+
+  const generatedOrders = useMemo(
+    () => orders.filter(o => shipments.some(s => s.orderId === o.id && !!s.lrNumber)),
+    [orders, shipments]
+  );
+
+  const handleBulkDownload = async () => {
+    setBulkDownloading(true);
+    try {
+      const result = await downloadLRsAsZip(filteredShipments, orders, vehicles);
+      if (result.failed > 0) {
+        showToast(`Downloaded ${result.success} LR${result.success !== 1 ? 's' : ''}. ${result.failed} failed.`, 'error');
+      } else {
+        showToast(`Downloaded ${result.success} LR${result.success !== 1 ? 's' : ''} successfully.`, 'success');
+      }
+    } catch (err) {
+      showToast(parseApiError(err), 'error');
+    } finally {
+      setBulkDownloading(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -154,7 +185,7 @@ export default function LRManagement() {
         <div className="p-6 border-b border-slate-50 flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-2xl">
             <button
-              onClick={() => setActiveTab('pending')}
+              onClick={() => { setActiveTab('pending'); setGeneratedOrderFilter('all'); }}
               className={cn(
                 "px-6 py-2 rounded-xl text-xs font-bold transition-all",
                 activeTab === 'pending' ? "bg-white text-primary shadow-sm" : "text-slate-500"
@@ -163,7 +194,7 @@ export default function LRManagement() {
               Pending LRs
             </button>
             <button
-              onClick={() => setActiveTab('generated')}
+              onClick={() => { setActiveTab('generated'); setGeneratedOrderFilter('all'); }}
               className={cn(
                 "px-6 py-2 rounded-xl text-xs font-bold transition-all",
                 activeTab === 'generated' ? "bg-white text-primary shadow-sm" : "text-slate-500"
@@ -173,15 +204,39 @@ export default function LRManagement() {
             </button>
           </div>
 
-          <div className="relative w-full md:w-72">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text"
-              placeholder="Search Trip, Container, LR..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-primary text-sm transition-all"
-            />
+          <div className="flex items-center gap-2 w-full md:w-auto flex-wrap md:flex-nowrap">
+            {activeTab === 'generated' && (
+              <>
+                <select
+                  value={generatedOrderFilter}
+                  onChange={(e) => setGeneratedOrderFilter(e.target.value)}
+                  className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-primary text-xs font-medium text-slate-600 transition-all"
+                >
+                  <option value="all">All Orders</option>
+                  {generatedOrders.map(o => (
+                    <option key={o.id} value={o.id}>{o.orderNumber}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleBulkDownload}
+                  disabled={bulkDownloading || filteredShipments.length === 0}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary/90 transition-all disabled:opacity-50 shrink-0"
+                >
+                  {bulkDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileDown className="w-3 h-3" />}
+                  Download All
+                </button>
+              </>
+            )}
+            <div className="relative w-full md:w-72">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search Trip, Container, LR..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-primary text-sm transition-all"
+              />
+            </div>
           </div>
         </div>
 

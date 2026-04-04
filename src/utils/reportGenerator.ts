@@ -330,24 +330,24 @@ export const downloadPayoutReport = async (expenses: Expense[], drivers: Driver[
   saveAs(new Blob([buffer]), `Payout_Report_${new Date().getTime()}.xlsx`);
 };
 
-export const downloadLR = async (shipment: Shipment, order?: Order, vehicle?: Vehicle) => {
-  const doc = new jsPDF();
+/** Builds a jsPDF LR document in memory and returns it. Does NOT save or download. */
+export const buildLRDocument = (shipment: Shipment, order?: Order, vehicle?: Vehicle): jsPDF => {
+  // jsPDF supports being called as a function (returns new instance if not called with new).
+  // Function-call form keeps vi.fn() arrow-function mocks in tests working correctly.
+  const doc = (jsPDF as unknown as () => jsPDF)();
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 20;
 
-  // LR No. in Top Right Corner
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text(`LR No: ${shipment.lrNumber || 'N/A'}`, pageWidth - margin, margin, { align: 'right' });
 
-  // Title
   doc.setFontSize(18);
   doc.text('Lorry Receipt', margin, margin + 10);
 
-  // Content
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  
+
   let y = margin + 30;
   const lineHeight = 10;
 
@@ -364,12 +364,16 @@ export const downloadLR = async (shipment: Shipment, order?: Order, vehicle?: Ve
   addField('Vehicle Number', shipment.vehicleNumber || 'N/A');
   addField('Origin', shipment.origin || order?.origin || 'N/A');
   addField('Destination', shipment.destination || order?.destination || 'N/A');
-  
-  // Container Size derived from Vehicle Type
+
   const containerSize = vehicle?.vehicleType || shipment.containerSize || 'N/A';
   addField('Container Size', containerSize);
-  
+
   addField('Container Number', shipment.containerNumber || 'N/A');
 
+  return doc;
+};
+
+export const downloadLR = async (shipment: Shipment, order?: Order, vehicle?: Vehicle) => {
+  const doc = buildLRDocument(shipment, order, vehicle);
   doc.save(`LR_${shipment.tripId}_${new Date().getTime()}.pdf`);
 };

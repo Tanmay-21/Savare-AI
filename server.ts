@@ -103,5 +103,5 @@ app.use((req, res) => {
 const port = process.env.PORT || 3001;
 app.listen(port, () => {
   console.log(`--- API SYSTEM ONLINE ON PORT ${port} ---`);
-  console.log(`--- URL: https://savare-ai.up.railway.app ---`);
+  console.log(`--- API listening. FRONTEND_URL: ${process.env.FRONTEND_URL || 'ANY'} ---`);
 });
