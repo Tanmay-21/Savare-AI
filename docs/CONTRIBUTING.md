@@ -12,14 +12,20 @@ npm install
 cp .env.local.example .env.local   # fill in Supabase + API credentials (see README)
 ```
 
-Open two terminals:
+**Option 1: Run frontend and server separately (two terminals)**
 
 ```bash
 # Terminal 1 — Express API server (port 3001)
-npm start
+npm run dev:server
 
 # Terminal 2 — Vite frontend (port 3000)
 npm run dev
+```
+
+**Option 2: Run both in one terminal**
+
+```bash
+npm run dev:full
 ```
 
 Vite proxies all `/api/*` requests to the Express server automatically. Visit `http://localhost:3000`.
@@ -28,12 +34,17 @@ For Supabase schema setup (tables, RPC functions), see the SQL migrations in the
 
 ## Available Scripts
 
-<!-- AUTO-GENERATED -->
+<!-- AUTO-GENERATED | Last Updated: 2026-04-05 -->
 | Command | Description |
 |---------|-------------|
-| `npm start` | Start Express API server (uses `$PORT`, defaults to 3001) |
+| `npm install` | Install dependencies |
 | `npm run dev` | Start Vite frontend on port 3000 (proxies `/api/*` to port 3001) |
+| `npm run dev:server` | Start Express API server in watch mode (port 3001) |
+| `npm run dev:full` | Run both frontend and server in parallel (frontend port 3000, server port 3001) |
+| `npm run start` | Start Express API server (uses `$PORT`, defaults to 3001) |
 | `npm run build` | Production build of the frontend, outputs to `dist/` |
+| `npm run build:server` | Build Express server to `dist-server/server.cjs` (esbuild bundle) |
+| `npm run build:prod` | Build both frontend and server for production |
 | `npm run preview` | Serve the production build locally |
 | `npm run lint` | TypeScript type-check only (`tsc --noEmit`) |
 | `npm run clean` | Delete `dist/` |
@@ -44,15 +55,17 @@ For Supabase schema setup (tables, RPC functions), see the SQL migrations in the
 
 ## Environment Variables
 
-<!-- AUTO-GENERATED -->
+<!-- AUTO-GENERATED | Last Updated: 2026-04-05 -->
 | Variable | Required | Where | Description |
 |----------|----------|-------|-------------|
 | `VITE_SUPABASE_URL` | Yes | Browser | Supabase project URL — embedded in browser bundle |
 | `VITE_SUPABASE_ANON_KEY` | Yes | Browser | Supabase anonymous key — embedded in browser bundle |
-| `VITE_API_BASE_URL` | Yes (prod) | Browser | Railway API URL — leave empty in local dev (Vite proxy handles it) |
+| `VITE_API_BASE_URL` | Yes (prod) | Browser | API URL — leave empty in local dev (Vite proxy handles it); set to your production API URL in prod |
 | `SUPABASE_URL` | Yes | Server only | Supabase project URL — used by the Express API server |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server only | Supabase service role key — **never expose to browser** |
-| `FRONTEND_URL` | Yes (prod) | Server only | Vercel app URL — configures CORS on the Railway server |
+| `FRONTEND_URL` | Yes (prod) | Server only | Frontend URL (comma-separated for multiple origins) — configures CORS on the Express server |
+| `GEMINI_API_KEY` | No | Server only | Optional Google Gemini AI key for advanced features |
+| `PORT` | No | Server only | Express server port; defaults to 3001 |
 <!-- AUTO-GENERATED -->
 
 ## Demo Mode
@@ -74,6 +87,20 @@ Demo sessions are rate-limited to 5 per IP per hour. Demo data is real data in S
 - All API handlers must call `requireAuth(req)` from `api/lib/auth.ts` before touching data
 - `apiFetch<T>()` in `src/lib/api.ts` auto-converts request bodies to `snake_case` and responses to `camelCase`
 - Immutable state updates — always spread or use new objects, never mutate in place
+
+## Data Fetching
+
+- **DataContext** (`src/contexts/DataContext.tsx`) — Single shared polling context for all entities (shipments, vehicles, drivers, orders, expenses, lrs)
+  - Polls every 30 seconds
+  - Provides `useData()` hook to access all data + `refetch()` method
+  - Error handling with toast notifications
+  - Prevents concurrent fetches with `fetchingRef`
+  - Use this instead of per-page fetching
+
+- **useUser** (`src/hooks/useUser.ts`) — Singleton pattern for auth state
+  - Call `refreshProfile()` after registration to clear `needsProfile` flag
+  - Shared across all hook calls; avoids duplicate auth subscriptions
+  - Handles Supabase `onAuthStateChange` events
 
 ## Testing
 

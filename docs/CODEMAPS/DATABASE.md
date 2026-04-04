@@ -1,5 +1,7 @@
 # Codemap: Supabase PostgreSQL Database
 
+**Last Updated:** 2026-04-05
+
 ## Connection
 
 **Browser:** `src/supabase.ts` creates a Supabase client with `VITE_SUPABASE_ANON_KEY`. Used only for Auth (session management). Never used for direct data queries.

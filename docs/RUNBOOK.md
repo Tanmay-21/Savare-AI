@@ -1,6 +1,6 @@
 # Runbook — Savare Operations & Troubleshooting
 
-**Last Updated:** 2026-04-04
+**Last Updated:** 2026-04-05
 
 This runbook covers common operational tasks, debugging tips, and troubleshooting procedures for the Savare logistics platform.
 
@@ -41,16 +41,22 @@ cp .env.local.example .env.local
 
 ### Running Locally
 
-Open **two** terminal windows:
+**Option 1: Run in two terminal windows**
 
-**Terminal 1 — Express API Server (port 3001):**
+Terminal 1 — Express API Server (port 3001):
 ```bash
-npm start
+npm run dev:server
 ```
 
-**Terminal 2 — Vite Frontend (port 3000):**
+Terminal 2 — Vite Frontend (port 3000):
 ```bash
 npm run dev
+```
+
+**Option 2: Run both in one terminal**
+
+```bash
+npm run dev:full
 ```
 
 Visit http://localhost:3000. Vite automatically proxies `/api/*` to the Express server.
@@ -151,49 +157,45 @@ export default async function handler(req: Request, res: Response) {
 ```
 src/
 ├── pages/
-│   └── MyPage.tsx          (page component, data fetching)
+│   └── MyPage.tsx          (page component using DataContext)
 ├── components/
 │   └── mypage/
 │       ├── MyPageModal.tsx (modal sub-component)
 │       └── MyPageTable.tsx (table sub-component)
-├── hooks/
-│   └── useMyPageData.ts    (data fetching logic)
 └── types.ts               (shared types)
 ```
 
-**Pattern for data fetching (src/hooks/useMyPageData.ts):**
+**Pattern for data fetching (use DataContext, not custom hooks):**
 ```typescript
-import { useState, useEffect, useRef } from 'react';
-import { apiFetch } from '../lib/api';
+import { useData } from '../contexts/DataContext';
+import { useToast } from '../contexts/ToastContext';
 
-export const useMyPageData = (showToast: (msg: string, type: string) => void) => {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const fetchErrorShown = useRef(false);
+export default function MyPage() {
+  const { shipments, orders, loading, error, refetch } = useData();
+  const { showToast } = useToast();
 
-  const fetchData = async () => {
-    try {
-      const data = await apiFetch('/api/my-endpoint');
-      setItems(data);
-    } catch (err) {
-      if (!fetchErrorShown.current) {
-        fetchErrorShown.current = true;
-        showToast(parseApiError(err), 'error');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Data is automatically polled every 30 seconds from DataContext
+  // Call refetch() to force an immediate update if needed
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // 30-second polling
-    return () => clearInterval(interval);
-  }, [showToast]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
 
-  return { items, loading, fetchData, fetchErrorShown };
-};
+  return (
+    <div>
+      {shipments.map((s) => (
+        <div key={s.id}>{s.tripId}</div>
+      ))}
+    </div>
+  );
+}
 ```
+
+**Key points:**
+- Use `useData()` hook from `DataContext` (single source of truth)
+- Do NOT create per-page custom fetch hooks
+- Call `refetch()` if you need immediate refresh after a mutation
+- DataContext handles 30-second polling automatically
+- Errors are shown as toasts; no extra error handling needed
 
 ---
 
@@ -464,28 +466,52 @@ UPDATE vehicles SET is_available = false WHERE id = 'vehicle-uuid';
 |-----------|------|---------|
 | API fetch wrapper | `src/lib/api.ts` | Auto snake_case/camelCase conversion, JWT attachment |
 | Auth guard | `src/App.tsx` | Route protection via `useUser()` hook |
-| User state | `src/hooks/useUser.ts` | Single source of truth for auth state |
+| User state | `src/hooks/useUser.ts` | Singleton pattern for auth state; `refreshProfile()` export |
+| Data context | `src/contexts/DataContext.tsx` | Shared polling for all entities; 30-second interval |
 | API validation | `api/lib/validate.ts` | Zod schemas, error handling |
+| API auth | `api/lib/auth.ts` | `requireAuth(req)` JWT validation |
 | Supabase client | `api/lib/supabase.ts` | Initialized with service role key |
-| Report generation | `src/utils/reportGenerator.ts` | Excel/PDF exports (browser-side) |
+| Report generation | `src/utils/reportGenerator.ts` | Excel/PDF exports; `buildLRDocument()` exported |
+| LR bulk download | `src/utils/lrBulkDownload.ts` | Zip generation for multiple LRs (uses jszip) |
 | Fiscal year logic | `src/lib/fiscalYear.ts` | Indian FY (April–March) utilities |
+| Vehicle detail modal | `src/components/vehicles/VehicleDetailModal.tsx` | Compliance tracking, shipment history, expense summary |
 
 ---
 
-## Quick Reference: Recent Changes (2026-04-04)
+## Quick Reference: Recent Changes (2026-04-05)
 
-### PATCH /api/shipments/:id
-- Now returns `{ data, vehicleUpdateFailed }` instead of just `data`
-- Accepts `previousVehicleId` to release old vehicle when swapping
+### DataContext
+- Single shared polling context for all entities (shipments, vehicles, drivers, orders, expenses, lrs)
+- Polls every 30 seconds; prevents concurrent fetches with ref guard
+- Replaced per-page custom fetch hooks
+- Call `useData()` to access; `refetch()` for immediate refresh
 
-### POST /api/lrs/generate
-- Requires `shipment.status === 'delivered'` (400 otherwise)
-- Frontend filters pending tab to only show delivered shipments
+### useUser singleton
+- Module-level cache with listener pattern
+- Call `refreshProfile()` after registration to clear `needsProfile` flag
+- Shared across all hook calls; avoids duplicate subscriptions
 
-### POST /api/expenses (new batch mode)
-- Body: `{ expenses: [...], lock_shipment_id? }`
-- Response: `{ data, lockFailed }`
-- Batch insert is atomic; locking is best-effort (non-fatal)
+### VehicleDetailModal
+- New reusable component for vehicle compliance tracking
+- Shows assigned driver, compliance dates (insurance, permit, fitness, PUC)
+- Displays recent shipments and expenses by vehicle
+- Calculates lifetime expense total; badges show expiry warnings
+
+### lrBulkDownload utility
+- New utility `src/utils/lrBulkDownload.ts`
+- Generates ZIP of multiple LR PDFs using jszip
+- Uses `buildLRDocument()` extracted from reportGenerator
+
+### buildLRDocument extracted
+- `src/utils/reportGenerator.ts` now exports `buildLRDocument(shipment, order, vehicle)`
+- Reusable for both single LR and bulk ZIP generation
+
+### dev:server and dev:full scripts
+- `npm run dev:server` — Express in watch mode (tsx watch)
+- `npm run dev:full` — Frontend + server in parallel
+
+### jszip added to dependencies
+- Explicit dependency for LR bulk download functionality
 
 ---
 
@@ -493,3 +519,4 @@ For more details, see:
 - [CLAUDE.md](../CLAUDE.md) — Architecture overview
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — Code style & testing
 - [docs/CODEMAPS/ROUTES.md](./CODEMAPS/ROUTES.md) — API endpoint details
+- [docs/CODEMAPS/DATABASE.md](./CODEMAPS/DATABASE.md) — Database schema

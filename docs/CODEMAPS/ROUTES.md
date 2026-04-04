@@ -1,5 +1,7 @@
 # Codemap: Routes & Navigation
 
+**Last Updated:** 2026-04-05
+
 ## Frontend Routes
 
 | Path | Component | Auth Required | Notes |
@@ -82,7 +84,20 @@ The signup form includes GSTIN and PAN fields (validated server-side with regex 
 - Shows the company name from `user.companyName` (passed as prop from `App.tsx`)
 - "Logout" button calls `supabase.auth.signOut()` which triggers `onAuthStateChange → null` → route guard redirects to `/login`
 
-## Recent API Changes (Updated 2026-04-04)
+## Data Fetching Architecture
+
+All entity data (shipments, vehicles, drivers, orders, expenses, lrs) is fetched through a single shared polling context:
+
+**DataContext** (`src/contexts/DataContext.tsx`):
+- Polls all 6 endpoints every 30 seconds
+- Shared state accessed via `useData()` hook across all pages
+- Prevents concurrent fetches with `fetchingRef` guard
+- Shows error toast once per error cycle (with `errorShownRef`)
+- Provides `refetch()` method for manual refresh after mutations
+
+**Why:** Avoids duplicate per-page fetch logic, ensures data consistency across the app, reduces API load with batched polling.
+
+## Recent API Changes (Updated 2026-04-05)
 
 ### PATCH /api/shipments/:id — Vehicle Update Atomicity
 
@@ -97,9 +112,19 @@ if (result?.vehicleUpdateFailed) {
 }
 ```
 
-### POST /api/shipments/:id with `previous_vehicle_id`
+### PATCH /api/shipments/:id with `previousVehicleId`
 
-**Change:** PATCH body now accepts optional `previous_vehicle_id` to handle vehicle swaps atomically on the server.
+**Change:** PATCH body now accepts optional `previousVehicleId` to handle vehicle swaps atomically on the server.
+
+**Example request:**
+```json
+{
+  "vehicleId": "new-vehicle-uuid",
+  "vehicleNumber": "KA-01-AB-1234",
+  "previousVehicleId": "old-vehicle-uuid",
+  "status": "in-transit"
+}
+```
 
 **Rationale:** When a user changes a vehicle mid-trip, the backend releases the old vehicle (`is_available: true`) and marks the new one as unavailable (`is_available: false`) in a single request.
 
