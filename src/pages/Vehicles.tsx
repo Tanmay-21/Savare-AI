@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Vehicle, Driver } from '../types';
+import VehicleDetailModal from '../components/vehicles/VehicleDetailModal';
 import { apiFetch } from '../lib/api';
 import { cn } from '../utils/cn';
 import { useToast } from '../contexts/ToastContext';
@@ -27,7 +28,21 @@ import { useData } from '../contexts/DataContext';
 
 export default function Vehicles() {
   const { showToast } = useToast();
-  const { vehicles, drivers, loading, refetch: fetchData } = useData();
+  const { vehicles, drivers, shipments, expenses, loading, refetch: fetchData } = useData();
+  const [detailVehicle, setDetailVehicle] = useState<Vehicle | null>(null);
+
+  const detailDriver = useMemo(
+    () => drivers.find(d => d.id === detailVehicle?.currentDriverId) ?? null,
+    [drivers, detailVehicle]
+  );
+  const detailShipments = useMemo(
+    () => shipments.filter(s => s.vehicleId === detailVehicle?.id),
+    [shipments, detailVehicle]
+  );
+  const detailExpenses = useMemo(
+    () => expenses.filter(e => e.vehicleId === detailVehicle?.id),
+    [expenses, detailVehicle]
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -328,7 +343,10 @@ export default function Vehicles() {
                   {getStatusIcon(vehicle.status)}
                   <span>{vehicle.status}</span>
                 </div>
-                <button className="text-primary text-xs font-bold flex items-center gap-1 hover:gap-2 transition-all">
+                <button
+                  onClick={() => setDetailVehicle(vehicle)}
+                  className="text-primary text-xs font-bold flex items-center gap-1 hover:gap-2 transition-all"
+                >
                   Details <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -570,8 +588,16 @@ export default function Vehicles() {
           </div>
         )}
       </AnimatePresence>
+
+      <VehicleDetailModal
+        isOpen={!!detailVehicle}
+        vehicle={detailVehicle}
+        driver={detailDriver}
+        shipments={detailShipments}
+        expenses={detailExpenses}
+        onClose={() => setDetailVehicle(null)}
+      />
     </div>
   );
 }
 
-// Removed local cn function
